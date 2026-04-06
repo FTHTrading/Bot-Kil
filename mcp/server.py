@@ -1659,10 +1659,149 @@ def mcp_tools():
     }
 
 
+# ── Research & Learning endpoints ─────────────────────────────────────────
+
+class ScanRequest(BaseModel):
+    categories: Optional[List[str]] = None   # default: all
+    min_edge:   float = 0.05
+    top_n:      int   = 20
+
+class ExecuteRequest(BaseModel):
+    ticker:     str
+    side:       str = "yes"
+    dry_run:    bool = True
+
+@app.post("/scan/all")
+async def scan_all_markets(req: ScanRequest):
+    """Scan ALL Kalshi markets for opportunities. Returns ranked list by edge."""
+    try:
+        from research.market_scanner import scan_all
+        opps = await scan_all(
+            categories=req.categories,
+            min_edge=req.min_edge,
+            top_n=req.top_n,
+        )
+        return {"count": len(opps), "opportunities": opps}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/scan/{category}")
+async def scan_category_endpoint(category: str, min_edge: float = 0.05):
+    """Scan a single Kalshi category: crypto | econ | political | weather | sports | misc"""
+    try:
+        from research.market_scanner import scan_category
+        opps = await scan_category(category=category, min_edge=min_edge)
+        return {"category": category, "count": len(opps), "opportunities": opps}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/research/report")
+def get_research_report():
+    """Latest autonomous research report (study, learn, act summary)."""
+    try:
+        from agents.research_agent import get_latest_report
+        return get_latest_report()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/research/performance")
+def get_research_performance():
+    """Combined performance summary: win rate, ROI, top strategies, 7-day P&L."""
+    try:
+        from agents.research_agent import get_performance_summary
+        return get_performance_summary()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/learning/stats")
+def get_learning_stats():
+    """Full learning tracker stats: all bets, P&L, strategy breakdown."""
+    try:
+        from research.learning_tracker import get_all_stats
+        return get_all_stats()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/learning/best-strategies")
+def get_learning_best_strategies(min_bets: int = 3):
+    """Top strategies ranked by ROI (must have >= min_bets bets)."""
+    try:
+        from research.learning_tracker import get_best_strategies
+        return {"strategies": get_best_strategies(min_bets=min_bets)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/learning/signal-correlations")
+def get_signal_correlations_endpoint():
+    """Which signals correlate most strongly with winning bets (Pearson r)."""
+    try:
+        from research.learning_tracker import get_signal_correlations
+        return {"correlations": get_signal_correlations()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/learning/daily-pnl")
+def get_daily_pnl_endpoint(days: int = 30):
+    """Daily P&L history for last N days."""
+    try:
+        from research.learning_tracker import get_daily_pnl
+        return {"days": days, "pnl": get_daily_pnl(days)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/research/settle")
+async def trigger_settlement():
+    """Manually trigger auto-settlement of all open bets."""
+    try:
+        from research.learning_tracker import auto_settle_open_bets
+        settled = await auto_settle_open_bets()
+        return {"settled": len(settled), "details": settled}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/research/run-cycle")
+async def run_research_cycle(execute: bool = False):
+    """Trigger one full research cycle (study + act). execute=true places real bets."""
+    try:
+        from agents.research_agent import study_cycle
+        report = await study_cycle(execute=execute)
+        return report
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.websocket("/feed/opportunities")
+async def ws_opportunities(ws: WebSocket):
+    """WebSocket: streams live opportunities as they are discovered each cycle."""
+    await ws.accept()
+    _ws_clients.append(ws)
+    try:
+        while True:
+            await asyncio.sleep(30)
+            try:
+                from research.market_scanner import scan_all
+                opps = await scan_all(min_edge=0.05, top_n=10)
+                await ws.send_json({"type": "opportunities", "data": opps})
+            except Exception:
+                pass
+    except WebSocketDisconnect:
+        if ws in _ws_clients:
+            _ws_clients.remove(ws)
+
+
 if __name__ == "__main__":
     port = int(os.getenv("MCP_PORT", "8420"))
     print(f"🎯 KALISHI EDGE MCP Server starting on port {port}")
     uvicorn.run(
         "mcp.server:app", host="0.0.0.0", port=port,
-        reload=True, reload_dirs=["mcp", "engine", "agents", "data"],
+        reload=True, reload_dirs=["mcp", "engine", "agents", "data", "research"],
     )
