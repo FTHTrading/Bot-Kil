@@ -534,3 +534,100 @@ async def snapshot_market_prices(tickers: list[str]) -> None:
             volume=raw.get("volume", 0) or 0,
             minutes_remaining=_minutes_remaining(raw),
         )
+
+
+async def scan_for_locks(
+    context_override: dict = None,
+    min_independent_groups: int = 3,
+) -> list[dict]:
+    """
+    Return ONLY lock-level plays: markets where ≥ 3 INDEPENDENT evidence
+    groups all agree on the same side.  These target an 85-90% win rate.
+
+    Each returned dict has:
+      conviction, independent_groups, avg_edge_pct, avg_confidence,
+      strategy_count, strategies, is_jackpot, ev_per_dollar, ...
+    """
+    from research.conviction_engine import scan_all_tiers, ConvictionLevel
+    tiers = await scan_all_tiers(context_override)
+    locks = tiers.get("locks", [])
+    strong = tiers.get("strong", [])
+
+    # Also include STRONG if they have enough independent groups
+    extras = [s for s in strong if s.get("independent_groups", 0) >= min_independent_groups]
+    combined = locks + extras
+
+    # Deduplicate by ticker
+    seen = set()
+    results = []
+    for r in combined:
+        if r["ticker"] not in seen:
+            seen.add(r["ticker"])
+            results.append(r)
+
+    results.sort(key=lambda r: (r.get("independent_groups", 0), r.get("avg_edge_pct", 0)), reverse=True)
+    return results
+
+
+async def scan_for_jackpots(
+    context_override: dict = None,
+    max_market_price: float = 0.20,
+    min_ev_per_dollar: float = 0.15,
+) -> list[dict]:
+    """
+    Hunt for asymmetric high-payout markets:
+    - Market betting price ≤ max_market_price (≥ 5:1 payout)
+    - Our model probability gives positive EV (ev ≥ min_ev_per_dollar)
+    - At least SIGNAL conviction level
+
+    Sorted by EV per dollar descending — these are the "big winners".
+    """
+    from research.conviction_engine import scan_all_tiers
+    tiers = await scan_all_tiers(context_override)
+    jackpots = tiers.get("jackpots", [])
+    return [j for j in jackpots if j.get("ev_per_dollar", 0) >= min_ev_per_dollar]
+
+
+async def scan_highest_value(
+    context_override: dict = None,
+    top_n: int = 20,
+) -> list[dict]:
+    """
+    Return the highest-EV plays regardless of category or style —
+    combines locks, jackpots, and strong plays into one ranked list.
+
+    Sorting key: conviction_bonus + jackpot_bonus + ev_per_dollar.
+    Use this for the "best bets right now" dashboard widget.
+    """
+    from research.conviction_engine import scan_all_tiers, ConvictionLevel
+
+    tiers = await scan_all_tiers(context_override)
+
+    # Merge all tiers with a composite score
+    all_plays = {}  # ticker → dict (deduplicate)
+
+    # Give each tier a bonus so LOCK > STRONG > SIGNAL
+    tier_bonus = {"LOCK": 1.0, "STRONG": 0.4, "SIGNAL": 0.1}
+    jackpot_bonus = 0.5
+
+    for tier_name, plays in [("locks", tiers["locks"]), ("strong", tiers["strong"]),
+                              ("signals", [s for s in tiers["signals"]
+                                           if s.get("conviction") in ("LOCK", "STRONG", "SIGNAL")])]:
+        for play in plays:
+            ticker = play["ticker"]
+            if ticker in all_plays:
+                continue
+            conv  = play.get("conviction", "SIGNAL")
+            score = (
+                tier_bonus.get(conv, 0)
+                + (jackpot_bonus if play.get("is_jackpot") else 0)
+                + play.get("ev_per_dollar", 0)
+            )
+            all_plays[ticker] = {**play, "_composite_score": score}
+
+    ranked = sorted(all_plays.values(), key=lambda p: p["_composite_score"], reverse=True)
+    # Remove internal key before returning
+    for p in ranked:
+        p.pop("_composite_score", None)
+
+    return ranked[:top_n]

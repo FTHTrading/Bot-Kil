@@ -57,6 +57,11 @@ class BaseStrategy:
     min_confidence: float = 0.40     # don't surface scores below this
     min_edge_pct: float = 0.04       # 4% minimum edge
 
+    # Class-level historical win rate (updated at runtime by learning tracker)
+    historical_win_rate: float = 0.50
+    # Strategy reliability tier — higher = more weight in conviction stacking
+    reliability: float = 1.0
+
     def is_applicable(self, market: dict) -> bool:
         return False
 
@@ -70,9 +75,20 @@ class BaseStrategy:
         edge = our_prob - market_prob
         if abs(edge) < self.min_edge_pct:
             return None
-        confidence = min(1.0, abs(edge) * 3)  # scale to 0-1 roughly
+
+        # Confidence: blend of edge size, our_prob distance from 50/50, and reliability
+        edge_conf   = min(1.0, abs(edge) * 4.0)        # edge of 25% → conf 1.0
+        prob_conf   = min(1.0, abs(our_prob - 0.5) * 3) # prob of 83% → conf 1.0
+        confidence  = (edge_conf * 0.6 + prob_conf * 0.4) * self.reliability
+        confidence  = round(min(1.0, confidence), 3)
+
         if confidence < self.min_confidence:
             return None
+
+        # High-payout flag: price ≤ 20¢ where we have positive edge
+        market_side_price = market_prob  # price of the side we're betting
+        is_high_payout = market_side_price <= 0.20 and our_prob >= 0.28
+
         return {
             "strategy": self.name,
             "side": side,
@@ -80,6 +96,7 @@ class BaseStrategy:
             "our_prob": round(our_prob, 4),
             "market_prob": round(market_prob, 4),
             "confidence": round(confidence, 3),
+            "is_high_payout": is_high_payout,
             "signals": signals,
             "reason": reason,
         }
@@ -96,6 +113,8 @@ class CryptoMomentumStrategy(BaseStrategy):
     Strong downward momentum + price below strike → HIGH NO probability.
     """
     name = "crypto_momentum"
+    reliability = 0.85       # good, but noisy in choppy conditions
+    min_edge_pct = 0.05
 
     ASSETS = {"BTC", "ETH", "SOL", "DOGE", "XRP", "BNB", "AVAX", "LINK"}
 
@@ -165,6 +184,8 @@ class CryptoVolMispricingStrategy(BaseStrategy):
     When realized vol << implied vol, fade extreme prices.
     """
     name = "crypto_vol_misprice"
+    reliability = 0.80
+    min_edge_pct = 0.05
 
     # Typical daily vol for Kalshi binary pricing
     _IMPLIED_ANNUAL = {"BTC": 0.65, "ETH": 0.80, "SOL": 1.0, "DOGE": 1.2}
@@ -352,6 +373,7 @@ class MeanReversionFadeStrategy(BaseStrategy):
 # ─── 5. Open Interest Signal ─────────────────────────────────────────────────
 
 class OpenInterestSignalStrategy(BaseStrategy):
+    reliability = 0.90   # smart money OI shifts are highly predictive
     """
     Sudden large OI increases (>20% in last snapshot) often signal smart money.
     Direction: if OI grows and price moves up → follow YES.
@@ -444,6 +466,8 @@ class EconConsensusStrategy(BaseStrategy):
     These are populated by the market scanner from public forecaster APIs.
     """
     name = "econ_consensus"
+    reliability = 1.20       # professional forecasters beat the market regularly
+    min_edge_pct = 0.05
 
     ECON_SERIES = {"CPI", "NFP", "PAYROLLS", "GDP", "PCE", "PPI", "RETAIL", "HOUSING", "ISM", "PMI"}
 
@@ -499,6 +523,8 @@ class FedWatchArbStrategy(BaseStrategy):
     e.g. {"hold": 0.78, "cut_25": 0.18, "cut_50": 0.04}
     """
     name = "fedwatch_arb"
+    reliability = 1.25       # CME futures market is most accurate FOMC predictor
+    min_edge_pct = 0.04
 
     def is_applicable(self, market: dict) -> bool:
         return "FOMC" in market.get("series", "").upper() or "FED" in market.get("series", "").upper()
@@ -705,6 +731,7 @@ class VolumeBreakoutStrategy(BaseStrategy):
     move accompanying the volume.
     """
     name = "volume_breakout"
+    reliability = 0.88
 
     def is_applicable(self, market: dict) -> bool:
         return "volume_ratio" in market  # scanner fills this from market_snapshots
@@ -766,7 +793,7 @@ def score_market(market: dict, context: dict, weights: dict[str, float] = None) 
             continue
         try:
             result = strategy.score(market, context)
-        except Exception as e:
+        except Exception:
             continue
         if result is None:
             continue
@@ -782,3 +809,93 @@ def best_score(market: dict, context: dict, weights: dict[str, float] = None) ->
     """Return the single highest-weighted strategy score, or None."""
     all_scores = score_market(market, context, weights)
     return all_scores[0] if all_scores else None
+
+
+def score_market_with_consensus(
+    market: dict, context: dict, weights: dict[str, float] = None
+) -> Optional[dict]:
+    """
+    Extended scoring: runs all strategies, finds the consensus side,
+    and annotates the result with conviction metadata.
+
+    Returns the BEST score enriched with:
+      consensus_count   — how many strategies agree on the same side
+      consensus_side    — "yes" or "no"
+      disagreement      — how many strategies say the opposite side
+      is_lock           — True if consensus_count >= 4 and edge >= 9%
+      is_jackpot        — True if market price <= 20c and we have edge
+      all_strategies    — list of ALL strategy names that fired
+    Or None if no strategies fire.
+    """
+    scores = score_market(market, context, weights)
+    if not scores:
+        return None
+
+    yes_scores = [s for s in scores if s["side"] == "yes"]
+    no_scores  = [s for s in scores if s["side"] == "no"]
+
+    if len(yes_scores) >= len(no_scores):
+        consensus_side  = "yes"
+        agreeing        = yes_scores
+        disagreeing     = no_scores
+    else:
+        consensus_side  = "no"
+        agreeing        = no_scores
+        disagreeing     = yes_scores
+
+    if not agreeing:
+        return None
+
+    best = agreeing[0]  # highest weighted_edge on consensus side
+    avg_edge = sum(abs(s["edge_pct"]) for s in agreeing) / len(agreeing)
+    avg_conf = sum(s["confidence"] for s in agreeing) / len(agreeing)
+
+    yes_ask = market.get("yes_ask", 0.5)
+    market_side_price = yes_ask if consensus_side == "yes" else (1.0 - yes_ask)
+
+    is_lock    = len(agreeing) >= 4 and avg_edge >= 0.09 and avg_conf >= 0.70
+    is_jackpot = market_side_price <= 0.20 and best["our_prob"] >= 0.28 and avg_edge > 0
+
+    best.update({
+        "consensus_count": len(agreeing),
+        "consensus_side":  consensus_side,
+        "disagreement":    len(disagreeing),
+        "avg_edge":        round(avg_edge, 4),
+        "avg_confidence":  round(avg_conf, 3),
+        "is_lock":         is_lock,
+        "is_jackpot":      is_jackpot,
+        "market_price":    round(market_side_price, 4),
+        "payout_multiplier": round(1.0 / max(0.01, market_side_price), 2),
+        "all_strategies":  [s["strategy"] for s in scores],
+    })
+    return best
+
+
+def find_high_payout_markets(
+    markets: list[dict],
+    context: dict,
+    weights: dict[str, float] = None,
+    max_price: float = 0.25,
+    min_our_prob: float = 0.30,
+) -> list[dict]:
+    """
+    Scan a list of markets and return only those where:
+    - Market price (on our betting side) is <= max_price (≥ 4:1 payout)
+    - Our model probability is >= min_our_prob (positive EV)
+    - At least one strategy fires
+
+    Sorted by EV per dollar descending.
+    """
+    results = []
+    for market in markets:
+        scored = score_market_with_consensus(market, context, weights)
+        if not scored:
+            continue
+        if scored.get("market_price", 1.0) <= max_price and scored.get("our_prob", 0) >= min_our_prob:
+            ev = scored["our_prob"] * scored.get("payout_multiplier", 1.0) - (1 - scored["our_prob"])
+            scored["ev_per_dollar"] = round(ev, 4)
+            if ev > 0:
+                results.append(scored)
+
+    results.sort(key=lambda r: r.get("ev_per_dollar", 0), reverse=True)
+    return results

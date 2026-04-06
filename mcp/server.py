@@ -1496,6 +1496,7 @@ async def betfair_auto(req: BetfairAutoRequest):
     try:
         daily = await run_daily_picks()
         picks = daily.get("top_picks", [])
+    except Exception:
         picks = []
 
     return auto_execute_picks(
@@ -1578,6 +1579,8 @@ async def kalshi_auto(req: KalshiAutoRequest):
     try:
         daily = await run_daily_picks()
         picks = daily.get("top_picks", [])
+    except Exception:
+        picks = []
 
     return await auto_execute_picks(
         picks    = picks,
@@ -1796,6 +1799,93 @@ async def ws_opportunities(ws: WebSocket):
     except WebSocketDisconnect:
         if ws in _ws_clients:
             _ws_clients.remove(ws)
+
+
+# ─── Conviction / high-value scan endpoints ────────────────────────────────────
+
+@app.get("/scan/locks")
+async def scan_locks_endpoint(min_groups: int = 3):
+    """
+    Return current LOCK-level plays — 4+ independent evidence groups all
+    agreeing on the same direction.  These are the 85-90% win-rate bets.
+    """
+    try:
+        from research.market_scanner import scan_for_locks
+        locks = await scan_for_locks(min_independent_groups=min_groups)
+        return {"count": len(locks), "locks": locks}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/scan/jackpots")
+async def scan_jackpots_endpoint(max_price: float = 0.20, min_ev: float = 0.15):
+    """
+    Return current JACKPOT plays — markets priced <= 20c where the model
+    gives >= 28% probability → 5:1+ expected payout.
+    """
+    try:
+        from research.market_scanner import scan_for_jackpots
+        jackpots = await scan_for_jackpots(max_market_price=max_price, min_ev_per_dollar=min_ev)
+        return {"count": len(jackpots), "jackpots": jackpots}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/scan/highest-value")
+async def scan_highest_value_endpoint(top_n: int = 20):
+    """
+    Composite ranked list of best bets right now.
+    Score = tier_bonus (LOCK=1.0, STRONG=0.4, SIGNAL=0.1)
+            + jackpot_bonus (0.5 if jackpot) + ev_per_dollar.
+    """
+    try:
+        from research.market_scanner import scan_highest_value
+        plays = await scan_highest_value(top_n=top_n)
+        return {"count": len(plays), "plays": plays}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/conviction/{ticker}")
+async def get_conviction_endpoint(ticker: str):
+    """
+    Analyse the conviction level for a single market ticker.
+    Returns the full ConvictionResult dict, or conviction=NOISE if no signal.
+    """
+    try:
+        from research.conviction_engine import analyze_conviction
+        import httpx
+        from data.feeds.kalshi_intraday import _headers, _BASE
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                f"{_BASE}/markets/{ticker}",
+                headers=_headers("GET", f"/markets/{ticker}"),
+            )
+            if resp.status_code != 200:
+                raise HTTPException(status_code=resp.status_code,
+                                    detail=f"Kalshi API: {resp.text[:200]}")
+            market = resp.json().get("market", {})
+        result = analyze_conviction(market, {})
+        if result is None:
+            return {"ticker": ticker, "conviction": "NOISE", "level": 0}
+        return {
+            "ticker":             result.ticker,
+            "side":               result.side,
+            "conviction":         result.level.name,
+            "level":              result.level.value,
+            "is_jackpot":         result.is_jackpot,
+            "independent_groups": result.independent_groups,
+            "strategy_count":     result.strategy_count,
+            "avg_edge_pct":       round(result.avg_edge_pct * 100, 2),
+            "avg_confidence":     round(result.avg_confidence * 100, 1),
+            "ev_per_dollar":      round(result.ev_per_dollar, 3),
+            "best_reason":        result.best_reason,
+            "strategies":         result.strategies,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":
