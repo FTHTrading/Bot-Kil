@@ -1,0 +1,329 @@
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/inter/700.css';
+@import '@fontsource/jetbrains-mono/400.css';
+@import '@fontsource/jetbrains-mono/500.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --green:       #00e87a;
+    --gold:        #f59e0b;
+    --glass-bg:    rgba(7, 14, 28, 0.62);
+    --glass-border: rgba(255, 255, 255, 0.07);
+    --glass-shine: rgba(255, 255, 255, 0.07);
+  }
+  html { font-size: 15px; }
+  body {
+    background: #020912;
+    color: #c8d8e8;
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #1a2e48 #06101f;
+  }
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: #06101f; }
+  ::-webkit-scrollbar-thumb { background: #1a2e48; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #253e5a; }
+}
+
+@layer components {
+
+  /* ═══════════════════════════════════════════════
+     LIQUID GLASS CARDS
+  ═══════════════════════════════════════════════ */
+
+  .card {
+    @apply relative rounded-card overflow-hidden;
+    padding: 1.25rem;
+    background: var(--glass-bg);
+    backdrop-filter: blur(28px) saturate(170%);
+    -webkit-backdrop-filter: blur(28px) saturate(170%);
+    border: 1px solid var(--glass-border);
+    box-shadow:
+      inset 0 1px 0 var(--glass-shine),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.12),
+      0 4px 24px rgba(0, 0, 0, 0.55),
+      0 1px 3px rgba(0, 0, 0, 0.25);
+    transition: box-shadow 0.28s ease, border-color 0.28s ease, transform 0.28s ease;
+    will-change: transform;
+  }
+  .card:hover {
+    border-color: rgba(255, 255, 255, 0.12);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.11),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.12),
+      0 16px 48px rgba(0, 0, 0, 0.65),
+      0 2px 6px rgba(0, 0, 0, 0.25);
+    transform: translateY(-1px);
+  }
+  .card::before {
+    content: '';
+    @apply absolute inset-x-0 top-0 h-px pointer-events-none;
+    background: linear-gradient(90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.13) 40%,
+      rgba(255, 255, 255, 0.13) 60%,
+      transparent 100%
+    );
+  }
+
+  .card-sm {
+    @apply relative rounded-xl overflow-hidden;
+    padding: 0.75rem;
+    background: rgba(8, 16, 30, 0.58);
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.05),
+      0 2px 12px rgba(0, 0, 0, 0.45);
+    transition: box-shadow 0.24s ease, border-color 0.24s ease, transform 0.24s ease;
+  }
+  .card-sm:hover {
+    border-color: rgba(255, 255, 255, 0.1);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.09),
+      0 8px 28px rgba(0, 0, 0, 0.55);
+    transform: translateY(-1px);
+  }
+
+  /* ═══════════════════════════════════════════════
+     STAT CARDS
+  ═══════════════════════════════════════════════ */
+
+  .stat-card {
+    @apply card flex flex-col gap-1 cursor-default;
+  }
+  .stat-card:hover {
+    border-color: rgba(255, 255, 255, 0.14);
+  }
+  .stat-label {
+    @apply text-[10px] font-semibold text-ink-500 uppercase tracking-[0.14em];
+  }
+  .stat-value {
+    @apply font-mono text-2xl font-semibold text-ink-100 leading-none;
+  }
+  .stat-sub {
+    @apply font-mono text-[11px] text-ink-400 leading-none;
+  }
+
+  /* ═══════════════════════════════════════════════
+     BADGES
+  ═══════════════════════════════════════════════ */
+
+  .badge {
+    @apply inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full;
+    letter-spacing: 0.04em;
+  }
+  .badge-green  {
+    @apply badge bg-green-950/60  text-edge-green;
+    border: 1px solid rgba(0, 232, 122, 0.22);
+    box-shadow: 0 0 10px rgba(0, 232, 122, 0.08);
+  }
+  .badge-gold  {
+    @apply badge bg-amber-950/60  text-edge-gold;
+    border: 1px solid rgba(245, 158, 11, 0.22);
+    box-shadow: 0 0 10px rgba(245, 158, 11, 0.08);
+  }
+  .badge-red  {
+    @apply badge bg-red-950/60    text-edge-red;
+    border: 1px solid rgba(255, 77, 109, 0.22);
+    box-shadow: 0 0 10px rgba(255, 77, 109, 0.08);
+  }
+  .badge-blue  {
+    @apply badge bg-blue-950/60   text-edge-blue;
+    border: 1px solid rgba(59, 130, 246, 0.22);
+    box-shadow: 0 0 10px rgba(59, 130, 246, 0.08);
+  }
+  .badge-purple {
+    @apply badge bg-purple-950/60 text-edge-purple;
+    border: 1px solid rgba(168, 85, 247, 0.22);
+    box-shadow: 0 0 10px rgba(168, 85, 247, 0.08);
+  }
+  .badge-cyan  {
+    @apply badge bg-cyan-950/60   text-edge-cyan;
+    border: 1px solid rgba(34, 211, 238, 0.22);
+    box-shadow: 0 0 10px rgba(34, 211, 238, 0.08);
+  }
+  .badge-ink  {
+    @apply badge;
+    background: rgba(10, 20, 38, 0.8);
+    color: #8faac0;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+  }
+
+  /* ═══════════════════════════════════════════════
+     BUTTONS
+  ═══════════════════════════════════════════════ */
+
+  .btn-primary {
+    @apply relative w-full overflow-hidden rounded-lg py-2.5 px-4
+           text-sm font-semibold text-edge-green
+           border border-edge-green/25
+           transition-all duration-200 active:scale-[0.985];
+    background: rgba(0, 232, 122, 0.08);
+  }
+  .btn-primary::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(105deg,
+      transparent 30%, rgba(0, 232, 122, 0.07) 50%, transparent 65%
+    );
+    transform: translateX(-120%);
+    transition: transform 0.55s ease;
+  }
+  .btn-primary:hover {
+    background: rgba(0, 232, 122, 0.14);
+    border-color: rgba(0, 232, 122, 0.40);
+    box-shadow: 0 0 20px rgba(0, 232, 122, 0.15);
+  }
+  .btn-primary:hover::after { transform: translateX(120%); }
+  .btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
+
+  .btn-ghost {
+    @apply text-ink-400 hover:text-ink-200 transition-colors duration-150;
+  }
+
+  /* ═══════════════════════════════════════════════
+     TABLES
+  ═══════════════════════════════════════════════ */
+
+  .data-table { @apply w-full text-xs; }
+  .data-table th {
+    @apply text-left py-2.5 pr-4 font-semibold uppercase
+           border-b border-white/[0.06] text-[10px];
+    color: #5a7a94;
+    letter-spacing: 0.12em;
+  }
+  .data-table td {
+    @apply py-2.5 pr-4 border-b border-white/[0.04];
+    transition: background 0.15s ease;
+  }
+  .data-table tbody tr {
+    transition: background 0.15s ease;
+  }
+  .data-table tbody tr:hover td {
+    background: rgba(255, 255, 255, 0.035);
+  }
+
+  /* ═══════════════════════════════════════════════
+     TAB NAV
+  ═══════════════════════════════════════════════ */
+
+  .tab-bar {
+    @apply flex gap-0 mb-4;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  }
+  .tab-item {
+    @apply px-4 py-2.5 text-sm font-medium text-ink-500
+           border-b-2 border-transparent -mb-px cursor-pointer whitespace-nowrap;
+    transition: color 0.18s ease, border-color 0.18s ease, text-shadow 0.18s ease;
+  }
+  .tab-item:hover { color: #9dbdd4; }
+  .tab-item.active {
+    @apply text-edge-green border-edge-green;
+    text-shadow: 0 0 18px rgba(0, 232, 122, 0.45);
+  }
+
+  /* ═══════════════════════════════════════════════
+     INPUTS
+  ═══════════════════════════════════════════════ */
+
+  .input-field {
+    @apply w-full rounded-lg px-3 py-2 text-sm text-ink-100 font-mono
+           focus:outline-none transition-all duration-200;
+    background: rgba(6, 14, 28, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
+  }
+  .input-field:focus {
+    border-color: rgba(0, 232, 122, 0.45);
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3), 0 0 0 3px rgba(0, 232, 122, 0.08);
+  }
+
+  /* ═══════════════════════════════════════════════
+     SECTION HEADING
+  ═══════════════════════════════════════════════ */
+
+  .section-title {
+    @apply flex items-center gap-2.5 mb-4;
+  }
+  .section-title-icon {
+    @apply w-8 h-8 rounded-lg flex items-center justify-center;
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .section-title-text {
+    @apply text-sm font-semibold tracking-tight;
+    color: #d4e8f4;
+  }
+
+  /* ═══════════════════════════════════════════════
+     MISC
+  ═══════════════════════════════════════════════ */
+
+  .divider { border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+  .glow-green  { box-shadow: 0 0 28px rgba(0, 232, 122, 0.22); }
+  .glow-gold   { box-shadow: 0 0 28px rgba(245, 158, 11, 0.22); }
+  .glow-red    { box-shadow: 0 0 28px rgba(255, 77, 109, 0.22); }
+}
+
+/* ═══════════════════════════════════════════════
+   ANIMATIONS
+═══════════════════════════════════════════════ */
+
+@keyframes shimmer {
+  0%   { background-position: -600px 0; }
+  100% { background-position: 600px 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg,
+    rgba(10, 20, 38, 0.8) 25%,
+    rgba(22, 38, 58, 0.8) 50%,
+    rgba(10, 20, 38, 0.8) 75%
+  );
+  background-size: 1200px 100%;
+  animation: shimmer 1.8s ease infinite;
+  border-radius: 6px;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.25; }
+}
+.live-dot { animation: blink 2.2s ease-in-out infinite; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-in { animation: fadeIn 0.35s ease-out both; }
+
+/* ═══════════════════════════════════════════════
+   CHART / RECHARTS OVERRIDES
+═══════════════════════════════════════════════ */
+
+.recharts-tooltip-wrapper .recharts-default-tooltip {
+  background: rgba(6, 14, 28, 0.92) !important;
+  backdrop-filter: blur(16px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  border-radius: 10px !important;
+  font-size: 11px !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6) !important;
+}
+.recharts-cartesian-grid-horizontal line,
+.recharts-cartesian-grid-vertical line {
+  stroke: rgba(255, 255, 255, 0.04) !important;
+}
+
+

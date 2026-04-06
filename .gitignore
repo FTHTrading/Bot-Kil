@@ -1,0 +1,64 @@
+# ── Python ──────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+*.log
+
+# ── Virtual environments ─────────────────────────────────
+.venv/
+venv/
+env/
+.env
+!.env.example
+
+# ── Database / data files ────────────────────────────────
+db/*.db
+db/logs/*.json
+data/cache/
+*.sqlite
+*.sqlite3
+
+# ── Node / Next.js ───────────────────────────────────────
+node_modules/
+dashboard/.next/
+dashboard/out/
+dashboard/.turbo/
+dashboard/npm-debug.log*
+dashboard/yarn-debug.log*
+dashboard/.pnp/
+.pnpm-store/
+
+# ── OS ───────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDE ──────────────────────────────────────────────────
+.vscode/settings.json
+.idea/
+*.suo
+*.user
+
+# ── Models / large binaries ──────────────────────────────
+models/*.pkl
+models/*.joblib
+models/*.h5
+models/*.pt
+models/*.bin
+
+# ── Misc ─────────────────────────────────────────────────
+*.bak
+*.swp
+*.tmp
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
