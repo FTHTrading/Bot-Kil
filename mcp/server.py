@@ -1494,10 +1494,8 @@ async def betfair_auto(req: BetfairAutoRequest):
 
     # Get today's picks from the orchestrator
     try:
-        daily = run_daily_picks()
-        picks = daily.get("picks", [])
-    except Exception as exc:
-        logger.error("Orchestrator error in betfair_auto: %s", exc)
+        daily = await run_daily_picks()
+        picks = daily.get("top_picks", [])
         picks = []
 
     return auto_execute_picks(
@@ -1578,11 +1576,8 @@ async def kalshi_auto(req: KalshiAutoRequest):
     bankroll = req.bankroll or float(os.getenv("BANKROLL_TOTAL", "10000"))
 
     try:
-        daily = run_daily_picks()
-        picks = daily.get("picks", [])
-    except Exception as exc:
-        logger.error("Orchestrator error in kalshi_auto: %s", exc)
-        picks = []
+        daily = await run_daily_picks()
+        picks = daily.get("top_picks", [])
 
     return await auto_execute_picks(
         picks    = picks,

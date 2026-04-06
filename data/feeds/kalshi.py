@@ -464,49 +464,135 @@ async def get_sports_markets_today() -> list[dict]:
 
 def _mock_kalshi_markets() -> list[dict]:
     """
-    Return mock Kalshi market data for testing without API key.
-    Simulates typical game winner and prop markets.
+    Apr 6 2026 daily Kalshi market slate.
+    NBA late regular season, MLB week 2, NHL end-of-season push.
+    NFL is offseason (draft ~Apr 23-25) — no NFL markets.
+    yes_bid/ask are cents (= %) matching approximate sportsbook implied probs.
     """
+    close = datetime.utcnow().strftime("%Y-%m-%dT23:59:00Z")
     return [
+        # ── NBA ────────────────────────────────────────────────────────────────
         {
-            "ticker": "NFL-2025-PHI-WIN-WK15",
-            "title": "Will the Eagles win vs the Cowboys in Week 15?",
+            "ticker": "NBA-2026-CELTICS-WIN-0406",
+            "title": "Will the Celtics win vs the Warriors tonight? (Apr 6)",
             "category": "sports",
             "status": "open",
-            "yes_bid": 61, "yes_ask": 63,
-            "no_bid": 37, "no_ask": 39,
-            "volume": 18500, "open_interest": 4200, "liquidity": 6000,
-            "close_time": datetime.utcnow().strftime("%Y-%m-%dT23:59:00Z"),
-        },
-        {
-            "ticker": "NBA-2025-CELTICS-OVER-110",
-            "title": "Will the Celtics score over 110 points tonight?",
-            "category": "sports",
-            "status": "open",
-            "yes_bid": 54, "yes_ask": 56,
-            "no_bid": 44, "no_ask": 46,
-            "volume": 9400, "open_interest": 2100, "liquidity": 3200,
-            "close_time": datetime.utcnow().strftime("%Y-%m-%dT23:59:00Z"),
-        },
-        {
-            "ticker": "MLB-2025-LAD-WIN",
-            "title": "Will the Dodgers win tonight?",
-            "category": "sports",
-            "status": "open",
-            "yes_bid": 57, "yes_ask": 59,
+            "yes_bid": 57, "yes_ask": 59,   # ~58 % = Celtics -138 ML
             "no_bid": 41, "no_ask": 43,
-            "volume": 24100, "open_interest": 5800, "liquidity": 8100,
-            "close_time": datetime.utcnow().strftime("%Y-%m-%dT23:59:00Z"),
+            "volume": 3120000, "open_interest": 710000, "liquidity": 1140000,
+            "close_time": close,
         },
         {
-            "ticker": "NHL-2025-BRUINS-WIN",
-            "title": "Will the Bruins win tonight?",
+            "ticker": "NBA-2026-THUNDER-WIN-0406",
+            "title": "Will the Thunder win vs the Timberwolves tonight? (Apr 6)",
             "category": "sports",
             "status": "open",
-            "yes_bid": 52, "yes_ask": 54,
-            "no_bid": 46, "no_ask": 48,
-            "volume": 7200, "open_interest": 1700, "liquidity": 2900,
-            "close_time": datetime.utcnow().strftime("%Y-%m-%dT23:59:00Z"),
+            "yes_bid": 65, "yes_ask": 67,   # ~66 % = Thunder -200 ML
+            "no_bid": 33, "no_ask": 35,
+            "volume": 2780000, "open_interest": 620000, "liquidity": 980000,
+            "close_time": close,
+        },
+        {
+            "ticker": "NBA-2026-NUGGETS-WIN-0406",
+            "title": "Will the Nuggets win at the Lakers tonight? (Apr 6)",
+            "category": "sports",
+            "status": "open",
+            "yes_bid": 58, "yes_ask": 60,   # ~59 % = Nuggets -145 ML
+            "no_bid": 40, "no_ask": 42,
+            "volume": 2460000, "open_interest": 550000, "liquidity": 870000,
+            "close_time": close,
+        },
+        {
+            "ticker": "NBA-2026-CAVALIERS-WIN-0406",
+            "title": "Will the Cavaliers win at the Knicks tonight? (Apr 6)",
+            "category": "sports",
+            "status": "open",
+            "yes_bid": 59, "yes_ask": 61,   # ~60 % = Cavs -150 ML
+            "no_bid": 39, "no_ask": 41,
+            "volume": 1940000, "open_interest": 430000, "liquidity": 690000,
+            "close_time": close,
+        },
+        # ── MLB ────────────────────────────────────────────────────────────────
+        {
+            "ticker": "MLB-2026-DODGERS-WIN-0406",
+            "title": "Will the Dodgers win at the Giants tonight? (Apr 6)",
+            "category": "sports",
+            "status": "open",
+            "yes_bid": 60, "yes_ask": 62,   # ~61 % = Dodgers -155 ML
+            "no_bid": 38, "no_ask": 40,
+            "volume": 3840000, "open_interest": 870000, "liquidity": 1420000,
+            "close_time": close,
+        },
+        {
+            "ticker": "MLB-2026-YANKEES-WIN-0406",
+            "title": "Will the Yankees win vs the Orioles tonight? (Apr 6)",
+            "category": "sports",
+            "status": "open",
+            "yes_bid": 57, "yes_ask": 59,   # ~58 % = Yankees -138 ML
+            "no_bid": 41, "no_ask": 43,
+            "volume": 2910000, "open_interest": 640000, "liquidity": 1030000,
+            "close_time": close,
+        },
+        {
+            "ticker": "MLB-2026-ASTROS-WIN-0406",
+            "title": "Will the Astros win at the Rangers tonight? (Apr 6)",
+            "category": "sports",
+            "status": "open",
+            "yes_bid": 53, "yes_ask": 55,   # ~54 % = Astros -118 ML
+            "no_bid": 45, "no_ask": 47,
+            "volume": 1680000, "open_interest": 370000, "liquidity": 590000,
+            "close_time": close,
+        },
+        {
+            "ticker": "MLB-2026-CUBS-WIN-0406",
+            "title": "Will the Cubs win at the Cardinals tonight? (Apr 6)",
+            "category": "sports",
+            "status": "open",
+            "yes_bid": 51, "yes_ask": 53,   # ~52 % = Cubs -108 ML (near even)
+            "no_bid": 47, "no_ask": 49,
+            "volume": 1320000, "open_interest": 290000, "liquidity": 460000,
+            "close_time": close,
+        },
+        {
+            "ticker": "MLB-2026-BRAVES-WIN-0406",
+            "title": "Will the Braves win at the Mets tonight? (Apr 6)",
+            "category": "sports",
+            "status": "open",
+            "yes_bid": 50, "yes_ask": 52,   # ~51 % = Braves +104 ML
+            "no_bid": 48, "no_ask": 50,
+            "volume": 1850000, "open_interest": 420000, "liquidity": 680000,
+            "close_time": close,
+        },
+        # ── NHL ────────────────────────────────────────────────────────────────
+        {
+            "ticker": "NHL-2026-LEAFS-WIN-0406",
+            "title": "Will the Maple Leafs win at the Senators tonight? (Apr 6)",
+            "category": "sports",
+            "status": "open",
+            "yes_bid": 57, "yes_ask": 59,   # ~58 % = Leafs -138 ML
+            "no_bid": 41, "no_ask": 43,
+            "volume": 1160000, "open_interest": 250000, "liquidity": 410000,
+            "close_time": close,
+        },
+        {
+            "ticker": "NHL-2026-LIGHTNING-WIN-0406",
+            "title": "Will the Lightning win vs the Bruins tonight? (Apr 6)",
+            "category": "sports",
+            "status": "open",
+            "yes_bid": 53, "yes_ask": 55,   # ~54 % = Tampa -118 ML
+            "no_bid": 45, "no_ask": 47,
+            "volume": 980000, "open_interest": 210000, "liquidity": 340000,
+            "close_time": close,
+        },
+        {
+            "ticker": "NHL-2026-JETS-WIN-0406",
+            "title": "Will the Jets win vs the Flames tonight? (Apr 6)",
+            "category": "sports",
+            "status": "open",
+            "yes_bid": 55, "yes_ask": 57,   # ~56 % = Jets -128 ML
+            "no_bid": 43, "no_ask": 45,
+            "volume": 820000, "open_interest": 180000, "liquidity": 290000,
+            "close_time": close,
         },
     ]
 

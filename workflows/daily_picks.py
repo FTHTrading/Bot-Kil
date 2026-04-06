@@ -77,26 +77,58 @@ async def run_daily_workflow():
             print(f"  Leg A: {arb['leg_a']['side']} @ {arb['leg_a']['odds']:.3f} ({arb['leg_a']['book'].upper()})")
             print(f"  Leg B: {arb['leg_b']['side']} @ {arb['leg_b']['odds']:.3f} ({arb['leg_b']['book'].upper()})")
     
+    # ── Kalshi dry-run execution ────────────────────────────────────────────────
+    print(f"\n[3/5] Running Kalshi DRY-RUN (no real orders placed)...")
+    top_picks = picks_data.get("top_picks", [])
+    try:
+        from agents.kalshi_executor import auto_execute_picks
+        kalshi_result = await auto_execute_picks(
+            top_picks,
+            BANKROLL,
+            min_edge=0.04,
+            dry_run=True,          # ← safe: no real money
+        )
+        placed      = kalshi_result.get("placed", 0)
+        skipped_cnt = kalshi_result.get("skipped_below_edge", 0)
+        spend       = kalshi_result.get("total_spend_usd", 0.0)
+        placed_dets = [
+            r for r in kalshi_result.get("results", [])
+            if r.get("status") in ("PLACED", "DRY_RUN")
+        ]
+        print(f"  Kalshi DRY-RUN complete:")
+        print(f"    Contracts matched & would be placed: {placed}")
+        print(f"    Picks skipped (no market / failed gate): {skipped_cnt}")
+        print(f"    Total would-spend: ${spend:,.2f}")
+        if placed_dets:
+            print(f"\n  Matches:")
+            for p in placed_dets[:5]:
+                print(
+                    f"    {p.get('market_ticker','?')}  YES@{p.get('yes_price_cents',0)}c  "
+                    f"x{p.get('contracts',0)} contracts  (${p.get('spend_usd',0):.2f})"
+                )
+    except Exception as e:
+        print(f"  [Kalshi] DRY-RUN skipped: {e}")
+
     # Summary
     summary = picks_data.get("summary", {})
-    print(f"\n{'─'*60}")
+    print(f"\n{'─'*60}".replace('─', '-'))
     print("  DAILY SUMMARY")
-    print(f"{'─'*60}")
+    print('-' * 60)
     print(f"  Strong value bets: {summary.get('value_bets', 0)}")
     print(f"  Arb profit avail:  ${summary.get('arb_profit_available', 0):.2f}")
-    
+
     # Save to log
     log_path = LOG_DIR / f"picks_{date_str}.json"
     with open(log_path, "w") as f:
         json.dump(picks_data, f, indent=2)
-    print(f"\n[3/4] Saved to {log_path}")
-    
+    print(f"\n[4/5] Saved to {log_path}")
+
     # Also save latest.json for dashboard
     latest_path = LOG_DIR / "picks_latest.json"
     with open(latest_path, "w") as f:
         json.dump(picks_data, f, indent=2)
-    
-    print("[4/4] Done. Dashboard will reflect latest picks.\n")
+
+    print("[5/5] Done. Dashboard will reflect latest picks.\n")
     return picks_data
 
 

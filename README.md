@@ -240,56 +240,56 @@ flowchart TD
 
 ## 🚀 Quick Start
 
+**No API keys needed** — demo mode runs with a built-in Apr 6 2026 slate.
 
-### Prerequisites
+### One-click setup (Windows)
 
-- Python 3.11+
-- Node.js 20+
-- An [Odds API key](https://the-odds-api.com) (free tier: 500 req/month)
-
-### 1 — Clone & install Python deps
-
-```bash
+```powershell
 git clone https://github.com/FTHTrading/Bet.git kalishi-edge
 cd kalishi-edge
+.\install.ps1
+```
+
+### Run picks immediately
+
+```powershell
+# View today's value picks + Kalshi dry-run (no real money)
+python scripts\run_today.py
+
+# Verify all connections and config
+python scripts\test_connections.py
+
+# Full daily workflow (picks, log, Kalshi dry-run)
+python workflows\daily_picks.py
+
+# Start API server + dashboard
+.\start.ps1
+```
+
+> ✅ API → **http://localhost:8420/docs**  
+> ✅ Dashboard → **http://localhost:3000**
+
+### Add live data (optional)
+
+```
+# .env
+ODDS_API_KEY=your_key      # https://the-odds-api.com  (free tier: 500 req/mo)
+KALSHI_API_KEY=your_key    # https://kalshi.com/account/api  (requires account + fund)
+```
+
+To place **real** Kalshi orders once your key is added:
+
+```powershell
+python scripts\run_today.py --execute
+```
+
+### Manual setup (cross-platform)
+
+```bash
 pip install -r requirements.txt
-```
-
-### 2 — Configure environment
-
-```bash
-cp .env.example .env
-# Open .env and fill in ODDS_API_KEY (required)
-# KALSHI_API_KEY, OPENAI_API_KEY are optional
-```
-
-### 3 — Create database
-
-```bash
 python db/setup.py
-```
-
-### 4 — Start the MCP API server
-
-```bash
-python -m uvicorn mcp.server:app --host 0.0.0.0 --port 8420
-```
-> ✅ API running at **http://localhost:8420**
-
-### 5 — Start the dashboard
-
-```bash
-cd dashboard
-npm install
-npm run dev
-```
-> ✅ Dashboard at **http://localhost:3420**
-
-### 6 — Run your first picks
-
-```bash
-# From project root:
-python workflows/daily_picks.py
+cp .env.example .env   # or copy .env.example .env on Windows
+python scripts/run_today.py
 ```
 
 ### One-command startup (PowerShell)
@@ -299,6 +299,15 @@ python workflows/daily_picks.py
 .\start.ps1 -ApiOnly
 .\start.ps1 -DashOnly
 ```
+
+---
+
+## 📁 Project Structure
+
+```
+kalishi-edge/
+│
+├── 🔧 engine/                    Core betting math
 
 ---
 
