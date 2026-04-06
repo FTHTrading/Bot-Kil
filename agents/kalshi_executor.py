@@ -33,7 +33,7 @@ MIN_EDGE_TO_EXECUTE   = 0.04   # 4 % minimum edge
 MIN_PRICE_CENTS       = 5      # no highly-illiquid extreme 95%+ markets
 MAX_PRICE_CENTS       = 95
 MAX_CONTRACTS         = 500    # hard contract cap per order
-MIN_SPEND_USD         = 2.0    # minimum $2 order value
+MIN_SPEND_USD         = 1.0    # minimum $1 order value (supports small $10 accounts)
 MAX_SPEND_USD         = 500.0  # hard dollar cap per order
 MIN_LIQUIDITY_MULT    = 5.0    # market liquidity ≥ 5× our spend
 
