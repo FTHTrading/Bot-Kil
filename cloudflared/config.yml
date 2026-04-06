@@ -1,0 +1,21 @@
+# Cloudflare Tunnel config for Kalishi Edge MCP API
+# ─────────────────────────────────────────────────────────────────────────────
+# After running: cloudflared tunnel create kalishi-edge-api
+# Replace <TUNNEL-ID> below with the UUID printed by that command.
+# Credentials file is created automatically at:
+#   C:\Users\Kevan\.cloudflared\<TUNNEL-ID>.json
+# ─────────────────────────────────────────────────────────────────────────────
+
+tunnel: <TUNNEL-ID>
+credentials-file: C:\Users\Kevan\.cloudflared\<TUNNEL-ID>.json
+
+ingress:
+  # Route api.bet.drunks.app → local FastAPI MCP server
+  - hostname: api.bet.drunks.app
+    service: http://localhost:8420
+    originRequest:
+      connectTimeout: 30s
+      noTLSVerify: false
+
+  # Catch-all required by cloudflared
+  - service: http_status:404

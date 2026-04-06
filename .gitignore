@@ -47,6 +47,9 @@ desktop.ini
 *.suo
 *.user
 
+# ── Temp helper scripts ─────────────────────────
+_cf_*.py
+_cf_*.jsbuild-output.txt
 # ── Models / large binaries ──────────────────────────────
 models/*.pkl
 models/*.joblib

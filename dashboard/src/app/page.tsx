@@ -243,7 +243,7 @@ function LiveDot() {
   useEffect(() => {
     let ws: WebSocket;
     try {
-      ws = new WebSocket('ws://localhost:8420/ws/live');
+      ws = new WebSocket((process.env.NEXT_PUBLIC_MCP_API_URL || 'http://localhost:8420').replace(/^http/, 'ws') + '/ws/live');
       ws.onopen  = () => setStatus('live');
       ws.onclose = () => setStatus('offline');
       ws.onerror = () => setStatus('offline');
