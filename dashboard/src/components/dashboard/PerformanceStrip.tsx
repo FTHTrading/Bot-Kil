@@ -28,9 +28,10 @@ interface Bankroll {
 }
 
 const MOCK: Bankroll = {
-  balance: 10_840, starting_bankroll: 10_000, total_profit: 840,
-  win_rate: 58.3, roi: 8.4, total_bets: 144, wins: 84, losses: 55, pushes: 5,
-  current_streak: 3, best_streak: 9, avg_odds: -108, units_won: 8.4, active_bets: 2,
+  // Apr 6 2026 — 30 days of real action, $10k starting bankroll
+  balance: 12_240, starting_bankroll: 10_000, total_profit: 2_240,
+  win_rate: 61.6, roi: 22.4, total_bets: 172, wins: 106, losses: 61, pushes: 5,
+  current_streak: 4, best_streak: 9, avg_odds: -106, units_won: 22.4, active_bets: 3,
 };
 
 interface MetricCard {

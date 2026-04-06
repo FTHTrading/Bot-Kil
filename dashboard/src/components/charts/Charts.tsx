@@ -14,16 +14,40 @@ const API = process.env.NEXT_PUBLIC_MCP_API_URL || 'http://localhost:8420';
 
 interface EquityPoint { date: string; balance: number; baseline?: number }
 
-const MOCK_EQUITY: EquityPoint[] = Array.from({ length: 30 }, (_, i) => {
-  const base = 10_000;
-  const noise = (Math.random() - 0.38) * 350;
-  const trend = i * 30;
-  return {
-    date: new Date(Date.now() - (29 - i) * 86_400_000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-    balance: Math.max(base * 0.9, Math.round(base + trend + noise)),
-    baseline: base,
-  };
-});
+// Deterministic 30-day equity curve — Mar 7 → Apr 6, 2026
+const MOCK_EQUITY: EquityPoint[] = [
+  { date: 'Mar 7',  balance: 10_000, baseline: 10_000 },
+  { date: 'Mar 8',  balance: 10_090, baseline: 10_000 },
+  { date: 'Mar 9',  balance: 9_910,  baseline: 10_000 },
+  { date: 'Mar 10', balance: 10_185, baseline: 10_000 },
+  { date: 'Mar 11', balance: 10_420, baseline: 10_000 },
+  { date: 'Mar 12', balance: 10_360, baseline: 10_000 },
+  { date: 'Mar 13', balance: 10_580, baseline: 10_000 },
+  { date: 'Mar 14', balance: 10_520, baseline: 10_000 },
+  { date: 'Mar 15', balance: 10_740, baseline: 10_000 },
+  { date: 'Mar 16', balance: 10_690, baseline: 10_000 },
+  { date: 'Mar 17', balance: 10_915, baseline: 10_000 },
+  { date: 'Mar 18', balance: 11_020, baseline: 10_000 },
+  { date: 'Mar 19', balance: 10_870, baseline: 10_000 },
+  { date: 'Mar 20', balance: 11_080, baseline: 10_000 },
+  { date: 'Mar 21', balance: 11_240, baseline: 10_000 },
+  { date: 'Mar 22', balance: 11_160, baseline: 10_000 },
+  { date: 'Mar 23', balance: 11_345, baseline: 10_000 },
+  { date: 'Mar 24', balance: 11_290, baseline: 10_000 },
+  { date: 'Mar 25', balance: 11_460, baseline: 10_000 },
+  { date: 'Mar 26', balance: 11_385, baseline: 10_000 },
+  { date: 'Mar 27', balance: 11_560, baseline: 10_000 },
+  { date: 'Mar 28', balance: 11_490, baseline: 10_000 },
+  { date: 'Mar 29', balance: 11_650, baseline: 10_000 },
+  { date: 'Mar 30', balance: 11_380, baseline: 10_000 },
+  { date: 'Mar 31', balance: 11_715, baseline: 10_000 },
+  { date: 'Apr 1',  balance: 11_840, baseline: 10_000 },
+  { date: 'Apr 2',  balance: 11_690, baseline: 10_000 },
+  { date: 'Apr 3',  balance: 11_870, baseline: 10_000 },
+  { date: 'Apr 4',  balance: 12_080, baseline: 10_000 },
+  { date: 'Apr 5',  balance: 11_960, baseline: 10_000 },
+  { date: 'Apr 6',  balance: 12_240, baseline: 10_000 },
+];
 
 // ─── Custom Tooltip ───────────────────────────────────────────────────────────
 

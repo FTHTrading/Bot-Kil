@@ -78,34 +78,75 @@ const TABS: TabDef[] = [
 
 // ─── Mock data ────────────────────────────────────────────────────────────────
 
+// ─── Today's picks — Apr 6 2026 ─────────────────────────────────────────────
+// NBA: late regular season (Warriors @ Celtics, OKC @ Minnesota, Nuggets @ Lakers)
+// MLB: Week 2 (Yankees @ Baltimore, Dodgers @ SF, Cubs @ STL, Astros @ TEX)
+// NHL: late regular season (Leafs @ Ottawa, Bruins @ Tampa)
 const MOCK_PICKS: Pick[] = [
-  { id:'p1', sport:'americanfootball_nfl', event:'Chiefs vs Raiders',  pick:'Chiefs -6.5',     odds:-115, verdict:'EXCELLENT EDGE', confidence:82, kelly_fraction:0.09, edge_pct:8.4, book:'DraftKings',  matchup:'KC vs LV' },
-  { id:'p2', sport:'basketball_nba',       event:'Lakers vs Celtics',  pick:'Celtics -3',      odds:-108, verdict:'GOOD EDGE',      confidence:71, kelly_fraction:0.06, edge_pct:5.1, book:'FanDuel',     matchup:'LAL vs BOS' },
-  { id:'p3', sport:'baseball_mlb',         event:'Yankees vs Sox',     pick:'Over 9.5',        odds:-112, verdict:'GOOD EDGE',      confidence:68, kelly_fraction:0.05, edge_pct:4.6, book:'BetMGM',      matchup:'NYY vs BOS' },
-  { id:'p4', sport:'icehockey_nhl',        event:'Bruins vs Penguins', pick:'Bruins ML',       odds:+118, verdict:'MARGINAL',       confidence:55, kelly_fraction:0.02, edge_pct:2.1, book:'Caesars',     matchup:'BOS vs PIT' },
+  { id:'p1', sport:'basketball_nba',       event:'Warriors @ Celtics',          pick:'Celtics -4.5',       odds:-112, verdict:'EXCELLENT EDGE', confidence:88, kelly_fraction:0.09, edge_pct:9.2, book:'DraftKings',  matchup:'GSW vs BOS', analysis:'Celtics 18-4 at home this month. Warriors missing Curry (questionable). Market line opened -3, steamed to -4.5 on sharp action.' },
+  { id:'p2', sport:'basketball_nba',       event:'OKC Thunder @ Minnesota',     pick:'Thunder -7',         odds:-110, verdict:'EXCELLENT EDGE', confidence:81, kelly_fraction:0.08, edge_pct:8.1, book:'FanDuel',     matchup:'OKC vs MIN', analysis:'OKC #1 seed protecting home-court seeding. Minnesota eliminated from top-4 race, minimal incentive. SZN-best 9-game ATS run for Thunder on road.' },
+  { id:'p3', sport:'baseball_mlb',         event:'Dodgers @ Giants',            pick:'Dodgers ML',         odds:-155, verdict:'EXCELLENT EDGE', confidence:79, kelly_fraction:0.07, edge_pct:7.4, book:'BetMGM',      matchup:'LAD vs SF',  analysis:'Ohtani healthy. Yamamoto vs. Logan Webb — model likes LAD run differential +1.8 lifetime. Giants 2-8 at Oracle Park vs LHP this early season.' },
+  { id:'p4', sport:'basketball_nba',       event:'Nuggets @ Lakers',            pick:'Nuggets -3',         odds:-108, verdict:'GOOD EDGE',      confidence:72, kelly_fraction:0.06, edge_pct:6.1, book:'Caesars',     matchup:'DEN vs LAL', analysis:'Jokic triple-double machine on 3-day rest. Lakers 4th-back-to-back in 7 days. Denver +7.4 net rating as road favorite this season.' },
+  { id:'p5', sport:'baseball_mlb',         event:'Yankees @ Baltimore',         pick:'Under 8.5',          odds:-115, verdict:'GOOD EDGE',      confidence:69, kelly_fraction:0.05, edge_pct:5.8, book:'PointsBet',   matchup:'NYY vs BAL', analysis:'Cole vs. Grayson Rodriguez — two elite starters with sub-3.20 xFIP. April at Camden Yards historically low-scoring (7.1 avg runs/game last 3 yrs).' },
+  { id:'p6', sport:'baseball_mlb',         event:'Astros @ Rangers',            pick:'Astros -1.5 RL',     odds:+122, verdict:'GOOD EDGE',      confidence:66, kelly_fraction:0.04, edge_pct:5.2, book:'DraftKings',  matchup:'HOU vs TEX', analysis:'Astros rotation depth vs Rangers bullpen vulnerability. Model projects HOU winning by 2+ in 61% of sims. +EV on RL at plus-odds.' },
+  { id:'p7', sport:'icehockey_nhl',        event:'Maple Leafs @ Ottawa',        pick:'Leafs ML',           odds:-140, verdict:'GOOD EDGE',      confidence:67, kelly_fraction:0.04, edge_pct:4.9, book:'FanDuel',     matchup:'TOR vs OTT', analysis:'Toronto chasing 2nd Wild Card, Ottawa eliminated. Mathews returning from lower-body. Leafs 7-2 vs Atlantic division opponents this month.' },
+  { id:'p8', sport:'baseball_mlb',         event:'Cubs @ Cardinals',            pick:'Over 8.5',           odds:-108, verdict:'MARGINAL',       confidence:58, kelly_fraction:0.02, edge_pct:2.8, book:'BetMGM',      matchup:'CHC vs STL', analysis:'Both bullpens taxed — Cardinals used 5 relievers yesterday. Busch Stadium April weather favorable (72°, minimal wind). Historical O/U: 8.9 in last 10 meetings.' },
 ];
 
+// ─── Arb opportunities — Apr 6 2026 ─────────────────────────────────────────
 const MOCK_ARB: Arb[] = [
-  { id:'a1', event:'49ers vs Seahawks', sport:'americanfootball_nfl', book_a:'DraftKings', book_b:'FanDuel', side_a:'49ers ML', side_b:'Seahawks ML +105', odds_a:-118, odds_b:+135, profit_pct:1.83, stake_100:92.56 },
-  { id:'a2', event:'Heat vs Bucks',     sport:'basketball_nba',       book_a:'BetMGM',     book_b:'Caesars',  side_a:'Heat +4.5', side_b:'Bucks -3.5', odds_a:-105, odds_b:-108, profit_pct:0.91, stake_100:94.18 },
+  { id:'a1', event:'Nuggets @ Lakers',   sport:'basketball_nba', book_a:'DraftKings', book_b:'Caesars',  side_a:'Nuggets -2.5', side_b:'Lakers +4',    odds_a:-108, odds_b:+118, profit_pct:1.94, stake_100:91.8 },
+  { id:'a2', event:'Dodgers @ Giants',   sport:'baseball_mlb',   book_a:'FanDuel',    book_b:'BetMGM',   side_a:'Dodgers ML',   side_b:'Giants ML',    odds_a:-145, odds_b:+165, profit_pct:0.87, stake_100:94.2 },
+  { id:'a3', event:'Leafs @ Ottawa',     sport:'icehockey_nhl',  book_a:'PointsBet',  book_b:'Caesars',  side_a:'Leafs -0.5 PL', side_b:'Ottawa +1.5 PL', odds_a:-112, odds_b:+130, profit_pct:1.12, stake_100:93.1 },
 ];
 
+// ─── Steam alerts — Apr 6 2026 ───────────────────────────────────────────────
 const MOCK_STEAM: SharpMove[] = [
-  { id:'s1', event:'Eagles vs Cowboys', sport:'americanfootball_nfl', description:'Eagles ML sharp reverse move', severity:'HIGH',   line_move:4, pct_bets:32, pct_money:68 },
-  { id:'s2', event:'Warriors vs Suns',  sport:'basketball_nba',       description:'Suns -3.5 steam tick at open',  severity:'MEDIUM', line_move:2, pct_bets:41, pct_money:62 },
+  { id:'s1', event:'Warriors @ Celtics',  sport:'basketball_nba', description:'Celtics spread steamed -3.5 → -4.5 in 40 min. Sharp accounts hammering at open. 74% of money on Celtics vs 51% of tickets.',          severity:'HIGH',   line_move:1,  pct_bets:51, pct_money:74, created_at:'2026-04-06T12:14:00Z' },
+  { id:'s2', event:'Dodgers @ Giants',    sport:'baseball_mlb',   description:'Dodgers ML moved -140 → -155 with 68% of money on LAD. Correlated action on Dodgers -1.5 RL simultaneously at FanDuel and BetMGM.',     severity:'HIGH',   line_move:15, pct_bets:62, pct_money:68, created_at:'2026-04-06T11:52:00Z' },
+  { id:'s3', event:'Yankees @ Baltimore', sport:'baseball_mlb',   description:'Under 8.5 ticked from -108 to -118 at three books simultaneously. Classic sharp under move — big money on cold April pitchers duel.',    severity:'MEDIUM', line_move:10, pct_bets:44, pct_money:61, created_at:'2026-04-06T13:05:00Z' },
+  { id:'s4', event:'OKC @ Minnesota',     sport:'basketball_nba', description:'Reverse line movement: 62% of tickets on Minnesota but money pushing Thunder from -5.5 to -7. Textbook sharp vs public split.',          severity:'MEDIUM', line_move:1,  pct_bets:38, pct_money:64, created_at:'2026-04-06T10:30:00Z' },
+  { id:'s5', event:'Astros @ Rangers',    sport:'baseball_mlb',   description:'RL line moved from +105 to +122 on Astros. Sharp money targeting plus-odds RL as Houston bullpen rest advantage becomes clear.',           severity:'LOW',    line_move:17, pct_bets:39, pct_money:55, created_at:'2026-04-06T09:45:00Z' },
 ];
 
+// ─── Season-to-date performance by sport ─────────────────────────────────────
 const MOCK_PERF: PerfStat[] = [
-  { sport:'NFL', bets:42, wins:26, units:3.8, roi:9.1 },
-  { sport:'NBA', bets:38, wins:22, units:2.1, roi:5.5 },
-  { sport:'MLB', bets:35, wins:20, units:1.6, roi:4.6 },
-  { sport:'NHL', bets:17, wins: 8, units:-0.4, roi:-2.4 },
+  { sport:'NBA', bets:68, wins:43, units:9.8,  roi:14.4 },
+  { sport:'MLB', bets:52, wins:31, units:7.1,  roi:13.7 },
+  { sport:'NHL', bets:28, wins:17, units:3.2,  roi:11.4 },
+  { sport:'NFL', bets:18, wins:11, units:2.1,  roi:11.7 },
+  { sport:'NCAAB',bets:6, wins: 4, units:0.2,  roi: 3.3 },
 ];
 
+// ─── Bet log — March 30 – April 6 2026 ───────────────────────────────────────
 const MOCK_BETS: Bet[] = [
-  { id:'b1', event:'Chiefs vs Raiders', side:'Chiefs -6.5', odds:-115, stake:220, pnl:191, status:'won',  created_at:'2024-01-15', book:'DraftKings' },
-  { id:'b2', event:'Lakers vs Celtics', side:'Lakers +3',   odds:-110, stake:110, pnl:-110, status:'lost', created_at:'2024-01-14', book:'FanDuel' },
-  { id:'b3', event:'Over 9.5 NYY-BOS', side:'Over',         odds:-112, stake:112, pnl:0, status:'pending', created_at:'2024-01-16', book:'BetMGM' },
+  // Today (Apr 6) — pending
+  { id:'b20', event:'Warriors @ Celtics',      side:'Celtics -4.5',           odds:-112, stake:275, status:'pending', created_at:'2026-04-06T17:30:00Z', book:'DraftKings' },
+  { id:'b19', event:'Dodgers @ Giants',        side:'Dodgers ML',             odds:-155, stake:225, status:'pending', created_at:'2026-04-06T17:25:00Z', book:'BetMGM' },
+  { id:'b18', event:'OKC Thunder @ Minnesota', side:'Thunder -7',             odds:-110, stake:195, status:'pending', created_at:'2026-04-06T14:00:00Z', book:'FanDuel' },
+  // Apr 5 — settled
+  { id:'b17', event:'Warriors @ Kings',        side:'Warriors -3.5',          odds:-112, stake:190, pnl:170, status:'won',  created_at:'2026-04-05T22:00:00Z', book:'DraftKings' },
+  { id:'b16', event:'Heat @ Celtics',          side:'Under 214',              odds:-110, stake:165, pnl:-165, status:'lost', created_at:'2026-04-05T19:30:00Z', book:'FanDuel' },
+  { id:'b15', event:'Dodgers @ Padres',        side:'Dodgers ML',             odds:-138, stake:230, pnl:167, status:'won',  created_at:'2026-04-05T21:10:00Z', book:'BetMGM' },
+  { id:'b14', event:'Cubs @ Reds',             side:'Over 8.5',               odds:-108, stake:155, pnl:144, status:'won',  created_at:'2026-04-05T19:05:00Z', book:'Caesars' },
+  // Apr 4
+  { id:'b13', event:'Nuggets @ Clippers',      side:'Under 220.5',            odds:-112, stake:175, pnl:156, status:'won',  created_at:'2026-04-04T22:00:00Z', book:'DraftKings' },
+  { id:'b12', event:'Nets @ Raptors',          side:'Raptors ML',             odds:+118, stake:175, pnl:207, status:'won',  created_at:'2026-04-04T19:30:00Z', book:'FanDuel' },
+  { id:'b11', event:'Yankees @ Orioles',       side:'Orioles +1.5 RL',        odds:-122, stake:120, pnl: 98, status:'won',  created_at:'2026-04-04T19:05:00Z', book:'PointsBet' },
+  // Apr 3
+  { id:'b10', event:'Thunder @ Wolves',        side:'Thunder -7.5',           odds:-110, stake:195, pnl:177, status:'won',  created_at:'2026-04-03T20:00:00Z', book:'BetMGM' },
+  { id:'b09', event:'Suns @ Mavericks',        side:'Suns ML',                odds:+135, stake:110, pnl:149, status:'won',  created_at:'2026-04-03T20:30:00Z', book:'Caesars' },
+  { id:'b08', event:'Astros @ Rangers',        side:'Over 9.5',               odds:-110, stake:150, pnl:-150, status:'lost', created_at:'2026-04-03T20:05:00Z', book:'DraftKings' },
+  // Apr 2
+  { id:'b07', event:'Knicks @ Sixers',         side:'Knicks -3',              odds:-112, stake:220, pnl:-220, status:'lost', created_at:'2026-04-02T19:30:00Z', book:'FanDuel' },
+  { id:'b06', event:'Cubs @ Cardinals',        side:'Under 8',                odds:-110, stake:110, pnl:100, status:'won',  created_at:'2026-04-02T20:15:00Z', book:'BetMGM' },
+  // Apr 1
+  { id:'b05', event:'Heat @ Bucks',            side:'Heat +4.5',              odds:-115, stake:165, pnl:-165, status:'lost', created_at:'2026-04-01T20:30:00Z', book:'DraftKings' },
+  { id:'b04', event:'Braves @ Mets',           side:'Braves ML',              odds:-128, stake:215, pnl:168, status:'won',  created_at:'2026-04-01T19:10:00Z', book:'FanDuel' },
+  { id:'b03', event:'Lightning vs Senators',   side:'Lightning ML',           odds:-115, stake:155, pnl:135, status:'won',  created_at:'2026-04-01T19:30:00Z', book:'Caesars' },
+  // Mar 31
+  { id:'b02', event:'Suns @ Mavericks',        side:'Over 228.5',             odds:-110, stake:165, pnl:150, status:'won',  created_at:'2026-03-31T20:30:00Z', book:'DraftKings' },
+  { id:'b01', event:'Dodgers @ Giants',        side:'Dodgers ML',             odds:-142, stake:225, pnl:158, status:'won',  created_at:'2026-03-31T22:10:00Z', book:'BetMGM' },
 ];
 
 // ─── Picks Table ──────────────────────────────────────────────────────────────
