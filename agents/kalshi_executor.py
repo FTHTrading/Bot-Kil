@@ -108,6 +108,146 @@ async def find_kalshi_match(team: str, sport: str) -> Optional[dict]:
     return normalize_kalshi_market(scored[0][1])
 
 
+# ── Crypto pick execution (ticker already known) ─────────────────────────────
+
+async def _execute_crypto_pick(pick: dict, bankroll: float, dry_run: bool = True) -> dict:
+    """
+    Execute a CRYPTO pick where the Kalshi ticker is already embedded in pick["market"].
+    Bypasses the team-name market-search step.
+    """
+    from data.feeds.kalshi import get_market, place_order as kalshi_place
+
+    crypto_meta = pick.get("crypto_meta", {})
+    ticker      = pick.get("market", "")
+    asset       = crypto_meta.get("asset", "CRYPTO")
+    side_str    = crypto_meta.get("side", "YES")     # "YES" or "NO"
+    side        = side_str.lower()                   # "yes" or "no"
+    edge_pct    = float(pick.get("edge_pct", 0.0))  # already in 0-100 scale
+    our_prob_pct = float(pick.get("our_prob", 0.0)) # 0-100 scale
+    stake_usd   = float(pick.get("recommended_stake", 0.0))
+
+    result: dict = {
+        "pick":             pick.get("pick", f"{asset} {side_str}"),
+        "sport":            "CRYPTO",
+        "team":             pick.get("pick", ""),
+        "edge_pct":         edge_pct,
+        "status":           "NOT_EXECUTED",
+        "reason":           None,
+        "order_id":         None,
+        "contracts":        None,
+        "spend_usd":        None,
+        "potential_profit": None,
+        "side":             side,
+        "dry_run":          dry_run,
+    }
+
+    # Gate 1 — API key required for live orders
+    if not dry_run and not os.getenv("KALSHI_API_KEY", ""):
+        result["reason"] = "KALSHI_API_KEY not configured"
+        return result
+
+    # Gate 2 — Edge threshold
+    if edge_pct < MIN_EDGE_TO_EXECUTE * 100:  # edge_pct is in % (e.g. 11.1), threshold in decimal (0.04)
+        result["reason"] = f"Edge {edge_pct:.1f}% below minimum {MIN_EDGE_TO_EXECUTE * 100:.0f}%"
+        return result
+
+    # Gate 3 — Fetch live market from Kalshi by ticker
+    if not ticker:
+        result["reason"] = "No Kalshi ticker in crypto pick (pick['market'] missing)"
+        return result
+
+    raw = await get_market(ticker)
+    if not raw:
+        result["reason"] = f"Kalshi market not found: {ticker}"
+        return result
+
+    # Prices are string dollars "0.8400" → convert to cents (1-99)
+    try:
+        yes_ask_cents = round(float(raw.get("yes_ask_dollars") or raw.get("yes_ask", 0)) * 100)
+        no_ask_cents  = round(float(raw.get("no_ask_dollars")  or raw.get("no_ask",  0)) * 100)
+    except (TypeError, ValueError):
+        result["reason"] = f"Could not parse price from market {ticker}"
+        return result
+
+    price_cents = yes_ask_cents if side == "yes" else no_ask_cents
+
+    # Gate 4 — Price in tradeable range
+    if not (MIN_PRICE_CENTS <= price_cents <= MAX_PRICE_CENTS):
+        result["reason"] = (
+            f"{side_str} price {price_cents}¢ outside tradeable range "
+            f"[{MIN_PRICE_CENTS},{MAX_PRICE_CENTS}]"
+        )
+        return result
+
+    # Gate 5 — Liquidity (use open_interest as proxy; liquidity_dollars is unreliable)
+    open_interest = float(raw.get("open_interest_fp") or raw.get("open_interest", 0))
+    liquidity_usd = open_interest  # each Kalshi contract pays $1, so OI ≈ $ liquidity
+    spend_usd     = min(max(round(stake_usd, 2), MIN_SPEND_USD), MAX_SPEND_USD)
+
+    if liquidity_usd < spend_usd * MIN_LIQUIDITY_MULT:
+        result["reason"] = (
+            f"Insufficient liquidity: OI=${liquidity_usd:.0f}, "
+            f"need ${spend_usd * MIN_LIQUIDITY_MULT:.2f} (5× stake)"
+        )
+        return result
+
+    contracts    = min(contracts_for_spend(spend_usd, price_cents), MAX_CONTRACTS)
+    actual_spend = round(contracts * (price_cents / 100.0), 2)
+    profit_win   = potential_profit(contracts, yes_ask_cents, side)
+
+    # Kalshi order API always takes a yes_price reference:
+    #   YES order → yes_price = yes_ask_cents
+    #   NO  order → yes_price = 100 - no_ask_cents (complement)
+    yes_price_ref = yes_ask_cents if side == "yes" else (100 - no_ask_cents)
+
+    result.update({
+        "market_ticker":    ticker,
+        "market_title":     raw.get("title", ""),
+        "market_yes_prob":  yes_ask_cents / 100.0,
+        "our_prob":         our_prob_pct / 100.0,
+        "our_edge":         round(edge_pct / 100.0, 4),
+        "side":             side,
+        "yes_price_cents":  yes_ask_cents,
+        "price_cents":      price_cents,    # actual cost per contract for the chosen side
+        "contracts":        contracts,
+        "spend_usd":        actual_spend,
+        "potential_profit": profit_win,
+        "net_roi":          round(profit_win / actual_spend, 3) if actual_spend else 0,
+    })
+
+    if dry_run:
+        result["status"] = "DRY_RUN"
+        result["reason"]  = (
+            f"Dry run — would buy {contracts} {side_str} contracts "
+            f"of {ticker} @ {price_cents}¢"
+        )
+        return result
+
+    # ── Place live order ──────────────────────────────────────────────────
+    resp = await kalshi_place(
+        ticker    = ticker,
+        side      = side,
+        count     = contracts,
+        yes_price = yes_price_ref,   # YES-side reference price (required by Kalshi API)
+    )
+
+    if "error" in resp:
+        result["status"] = "ERROR"
+        result["reason"] = resp["error"]
+        logger.error("Kalshi crypto order failed: %s  ticker=%s", resp["error"], ticker)
+    else:
+        order = resp.get("order", {})
+        result["status"]   = "PLACED"
+        result["order_id"] = order.get("order_id", "")
+        result["reason"]   = "Order placed successfully"
+        logger.info(
+            "KALSHI CRYPTO ORDER PLACED: %s side=%s contracts=%d price=%d¢ order_id=%s",
+            ticker, side, contracts, price_cents, result["order_id"],
+        )
+
+    return result
+
+
 # ── Single pick execution ─────────────────────────────────────────────────────
 
 async def execute_pick(
@@ -124,6 +264,11 @@ async def execute_pick(
     Returns a result dict. dry_run=True by default.
     """
     sport        = pick.get("sport", "").lower()
+
+    # Crypto picks already carry the Kalshi ticker — use direct execution path
+    if sport == "crypto":
+        return await _execute_crypto_pick(pick, bankroll, dry_run=dry_run)
+
     team         = pick.get("team") or pick.get("pick", "")
     edge_pct     = float(pick.get("edge_pct", 0.0))
     our_prob     = float(pick.get("our_prob", 0.0))

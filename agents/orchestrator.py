@@ -17,6 +17,25 @@ BANKROLL = float(os.getenv("BANKROLL_TOTAL", "10000"))
 MIN_EDGE = float(os.getenv("MIN_EDGE_PCT", "0.03"))
 
 
+async def _build_crypto_picks(bankroll: float, min_edge: float) -> list[dict]:
+    """Fetch Kalshi crypto/financial markets and return value picks."""
+    try:
+        from data.feeds.kalshi_crypto import get_crypto_markets
+        from data.feeds.btc_price import get_crypto_prices
+        from engine.crypto_ev import price_edge_picks
+
+        prices, markets = await asyncio.gather(
+            get_crypto_prices(),
+            get_crypto_markets(),
+        )
+        if not markets:
+            return []
+        return price_edge_picks(markets, prices, bankroll, min_edge=min_edge)
+    except Exception as e:
+        print(f"[Orchestrator] Crypto picks error: {e}")
+        return []
+
+
 async def run_daily_picks() -> dict:
     """
     Master daily picks workflow.
@@ -148,19 +167,28 @@ async def run_daily_picks() -> dict:
     picks.sort(key=lambda x: x["edge_pct"], reverse=True)
     arb_picks.sort(key=lambda x: x["profit_pct"], reverse=True)
     college_picks.sort(key=lambda x: x.get("edge_pct", 0), reverse=True)
-    
+
+    # ── Crypto / financial market picks ────────────────────────────────────
+    crypto_picks = await _build_crypto_picks(BANKROLL, MIN_EDGE)
+
+    # Unified top-picks: sports + crypto, sorted by edge
+    all_value_picks = sorted(picks + crypto_picks, key=lambda x: x["edge_pct"], reverse=True)
+
     return {
         "generated_at": datetime.now().isoformat(),
         "bankroll": BANKROLL,
-        "total_picks": len(picks),
+        "total_picks": len(all_value_picks),
         "total_arbs": len(arb_picks),
         "total_college_picks": len(college_picks),
-        "top_picks": picks[:20],
+        "top_picks": all_value_picks[:25],
+        "sports_picks": picks[:20],
+        "crypto_picks": crypto_picks[:15],
         "arbitrage_opportunities": arb_picks[:10],
         "college_picks": college_picks[:15],
         "sports_covered": list(all_odds.keys()),
         "summary": {
-            "value_bets": len([p for p in picks if "VALUE" in p["verdict"] or "STRONG" in p["verdict"]]),
+            "value_bets":         len([p for p in picks        if "VALUE" in p["verdict"] or "STRONG" in p["verdict"]]),
+            "crypto_value_bets":  len([p for p in crypto_picks if "VALUE" in p["verdict"] or "STRONG" in p["verdict"]]),
             "arb_profit_available": sum(a["guaranteed_profit"] for a in arb_picks),
             "college_value_bets": len([p for p in college_picks if p.get("edge_pct", 0) > 0]),
         }
