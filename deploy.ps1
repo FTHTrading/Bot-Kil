@@ -20,7 +20,7 @@ Pop-Location
 # ─── 2. Deploy dashboard to Cloudflare Pages ─────────────────────────────────
 Write-Host "`n[2/3] Deploying to Cloudflare Pages..." -ForegroundColor Yellow
 Push-Location dashboard
-npx wrangler pages deploy out --project-name kalishi-edge-dashboard
+npx wrangler pages deploy out --project-name bot1
 if ($LASTEXITCODE -ne 0) { throw "Pages deploy failed" }
 Pop-Location
 
@@ -38,6 +38,6 @@ if ($LASTEXITCODE -ne 0) { throw "Worker deploy failed" }
 Pop-Location
 
 Write-Host "`n=== Deployment complete! ===" -ForegroundColor Green
-Write-Host "  Dashboard : https://kalishi-edge-dashboard.pages.dev" -ForegroundColor White
+Write-Host "  Dashboard : https://bot1.unykorn.org (bot1.pages.dev)" -ForegroundColor White
 Write-Host "  AI Worker : https://kalishi-ai-briefing.<account>.workers.dev" -ForegroundColor White
 Write-Host ""
