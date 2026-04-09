@@ -118,6 +118,53 @@ export interface Middle {
   ev_pct: number;
 }
 
+// ─── Live Autonomous Agent types ──────────────────────────────────────────────
+
+export interface LiveStatus {
+  agent_alive: boolean;
+  date: string | null;
+  daily_spend_usd: number;
+  cooldowns_sec: Record<string, number>;
+  last_session_ts: string | null;
+  last_file_age_s: number | null;
+  reopen_mode: boolean;
+}
+
+export interface LiveBet {
+  source: 'kalshi_order' | 'ledger';
+  order_id?: string;
+  ticker?: string;
+  side?: string;
+  entry_price_cents?: number;
+  edge_pct?: number;
+  asset?: string;
+  market_type?: string;
+  entry_ts?: string;
+  clv?: number | null;
+  close_price_cents?: number | null;
+  status?: string;
+  amount?: number;
+  ts?: number;
+}
+
+export interface LiveSession {
+  session: number;
+  timestamp: string;
+  bets_placed: number;
+  tool_calls: number;
+  provider: string;
+  dry_run: boolean;
+  bets: Array<{
+    status: string;
+    ticker: string;
+    side: string;
+    contracts: number;
+    yes_price: number;
+    reasoning: string;
+  }>;
+  summary: string;
+}
+
 export interface SteamAlert {
   event: string;
   sport: string;

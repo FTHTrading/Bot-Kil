@@ -1615,6 +1615,173 @@ async def kalshi_auto(req: KalshiAutoRequest):
     )
 
 
+# ── Live Autonomous Agent Endpoints ───────────────────────────────────────────
+
+LOGS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
+
+
+@app.get("/live/status")
+def live_status():
+    """Live autonomous agent status — daily_state.json + PID check."""
+    import glob, time
+    state_file = os.path.join(LOGS_DIR, "daily_state.json")
+    try:
+        with open(state_file) as f:
+            state = json.load(f)
+    except Exception:
+        state = {}
+
+    # determine if agent is running by checking the most-recent session file age
+    pattern = os.path.join(LOGS_DIR, "autonomous_*.jsonl")
+    files = sorted(glob.glob(pattern))
+    last_file_age_s: float | None = None
+    last_session_ts: str | None = None
+    if files:
+        mtime = os.path.getmtime(files[-1])
+        last_file_age_s = time.time() - mtime
+        try:
+            with open(files[-1]) as f:
+                lines = [l for l in f.read().splitlines() if l.strip()]
+            if lines:
+                last_line = json.loads(lines[-1])
+                last_session_ts = last_line.get("timestamp")
+        except Exception:
+            pass
+
+    # cooldown display
+    cooldowns = state.get("cooldowns", {})
+    cd_info = {}
+    for asset, until in cooldowns.items():
+        remaining = int(until - __import__("time").time())
+        cd_info[asset] = max(0, remaining)
+
+    agent_alive = last_file_age_s is not None and last_file_age_s < 7200  # alive if wrote within 2h
+
+    return {
+        "agent_alive":     agent_alive,
+        "date":            state.get("date"),
+        "daily_spend_usd": round(state.get("daily_spend", 0), 4),
+        "cooldowns_sec":   cd_info,
+        "last_session_ts": last_session_ts,
+        "last_file_age_s": round(last_file_age_s, 1) if last_file_age_s is not None else None,
+        "reopen_mode":     state.get("reopen_mode", False),
+    }
+
+
+@app.get("/live/bets")
+def live_bets(limit: int = 50):
+    """Open + recent positions from clv_history.jsonl and bet_ledger_multi.json."""
+    clv_file    = os.path.join(LOGS_DIR, "clv_history.jsonl")
+    ledger_file = os.path.join(LOGS_DIR, "bet_ledger_multi.json")
+
+    positions: list[dict] = []
+
+    # load CLV-tracked bets (actual Kalshi orders)
+    try:
+        with open(clv_file) as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    entry = json.loads(line)
+                    positions.append({
+                        "source":        "kalshi_order",
+                        "order_id":      entry.get("order_id"),
+                        "ticker":        entry.get("ticker"),
+                        "side":          entry.get("side"),
+                        "entry_price_cents": entry.get("entry_price_cents"),
+                        "edge_pct":      entry.get("edge_pct_at_entry"),
+                        "asset":         entry.get("asset"),
+                        "market_type":   entry.get("market_type"),
+                        "entry_ts":      entry.get("entry_ts"),
+                        "clv":           entry.get("clv"),
+                        "close_price_cents": entry.get("close_price_cents"),
+                        "status":        "open" if entry.get("close_ts") is None else "closed",
+                    })
+    except FileNotFoundError:
+        pass
+
+    # load paper/multi ledger bets (recent sessions)
+    try:
+        with open(ledger_file) as f:
+            ledger = json.load(f)
+        for key, val in list(ledger.items())[-limit:]:
+            positions.append({
+                "source":  "ledger",
+                "ticker":  val.get("ticker"),
+                "side":    val.get("side"),
+                "amount":  val.get("amount"),
+                "ts":      val.get("ts"),
+                "status":  "placed",
+            })
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+
+    positions.sort(key=lambda x: x.get("entry_ts") or x.get("ts") or "", reverse=True)
+    return {"count": len(positions), "bets": positions[:limit]}
+
+
+@app.get("/live/sessions")
+def live_sessions(limit: int = 15):
+    """Recent autonomous session summaries from autonomous_*.jsonl files."""
+    import glob
+    pattern = os.path.join(LOGS_DIR, "autonomous_*.jsonl")
+    files   = sorted(glob.glob(pattern), reverse=True)
+
+    sessions: list[dict] = []
+    for fpath in files:
+        if len(sessions) >= limit:
+            break
+        try:
+            with open(fpath) as f:
+                lines = [l for l in f.read().splitlines() if l.strip()]
+            for line in reversed(lines):
+                if len(sessions) >= limit:
+                    break
+                entry = json.loads(line)
+                sessions.append({
+                    "session":      entry.get("session"),
+                    "timestamp":    entry.get("timestamp"),
+                    "bets_placed":  entry.get("bets_placed", 0),
+                    "tool_calls":   entry.get("tool_calls", 0),
+                    "provider":     entry.get("provider"),
+                    "dry_run":      entry.get("dry_run", False),
+                    "bets":         entry.get("session_log", []),
+                    "summary":      (entry.get("final_analysis") or "")[:200],
+                })
+        except Exception:
+            continue
+
+    return {"count": len(sessions), "sessions": sessions}
+
+
+@app.get("/live/pnl")
+def live_pnl():
+    """Equity curve and performance summary from performance.json + paper_trades."""
+    perf_file  = os.path.join(LOGS_DIR, "performance.json")
+    daily_file = os.path.join(LOGS_DIR, "daily_pnl_multi.json")
+
+    perf  = {}
+    daily = {}
+
+    try:
+        with open(perf_file) as f:
+            perf = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+
+    try:
+        with open(daily_file) as f:
+            daily = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+
+    return {
+        "performance": perf,
+        "daily_pnl":   daily,
+        "generated_at": datetime.now().isoformat(),
+    }
+
+
 # ── MCP Tool Manifest ──────────────────────────────────────────────────────
 
 @app.get("/mcp/tools")

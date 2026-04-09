@@ -8,6 +8,7 @@ import IntelligenceTabs from '@/components/dashboard/IntelligenceTabs';
 import DetailDrawer, { DrawerPayload } from '@/components/dashboard/DetailDrawer';
 import ActivityFeed from '@/components/dashboard/ActivityFeed';
 import BackOffice from '@/components/dashboard/BackOffice';
+import LiveAgentPanel from '@/components/dashboard/LiveAgentPanel';
 
 export default function Dashboard() {
   const [drawerPayload, setDrawerPayload] = useState<DrawerPayload | null>(null);
@@ -46,44 +47,47 @@ export default function Dashboard() {
           }
         />
 
-        {/* Charts row: equity curve (2/3) + kelly calculator (1/3) */}
+        {/* Live agent panel (full width) + kelly calculator */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           <div className="lg:col-span-2">
-            <EquityCurveCard />
+            <LiveAgentPanel />
           </div>
           <div>
             <KellyCalcCard />
           </div>
         </div>
 
-        {/* Intelligence workspace (2/3) + activity feed (1/3) */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-          <div className="xl:col-span-2">
-            <IntelligenceTabs
-              onPickSelect={(p) =>
-                setDrawerPayload({
-                  type: 'pick',
-                  data: p as Parameters<typeof setDrawerPayload>[0] extends { type: 'pick'; data: infer D } ? D : never,
-                })
-              }
-              onArbSelect={(a) =>
-                setDrawerPayload({
-                  type: 'arb',
-                  data: a as Parameters<typeof setDrawerPayload>[0] extends { type: 'arb'; data: infer D } ? D : never,
-                })
-              }
-              onBetSelect={(b) =>
-                setDrawerPayload({
-                  type: 'bet',
-                  data: b as Parameters<typeof setDrawerPayload>[0] extends { type: 'bet'; data: infer D } ? D : never,
-                })
-              }
-            />
+        {/* Charts row: equity curve (2/3) + activity feed (1/3) */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <div className="lg:col-span-2">
+            <EquityCurveCard />
           </div>
           <div>
             <ActivityFeed />
           </div>
         </div>
+
+        {/* Intelligence workspace */}
+        <IntelligenceTabs
+          onPickSelect={(p) =>
+            setDrawerPayload({
+              type: 'pick',
+              data: p as Parameters<typeof setDrawerPayload>[0] extends { type: 'pick'; data: infer D } ? D : never,
+            })
+          }
+          onArbSelect={(a) =>
+            setDrawerPayload({
+              type: 'arb',
+              data: a as Parameters<typeof setDrawerPayload>[0] extends { type: 'arb'; data: infer D } ? D : never,
+            })
+          }
+          onBetSelect={(b) =>
+            setDrawerPayload({
+              type: 'bet',
+              data: b as Parameters<typeof setDrawerPayload>[0] extends { type: 'bet'; data: infer D } ? D : never,
+            })
+          }
+        />
 
         {/* Back-office: workflows + API health */}
         <BackOffice />
