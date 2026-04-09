@@ -1,14 +1,14 @@
 # run_24_7.ps1 — Kalshi intraday bot, restarts automatically on crash
-# Runs 24/7, polling every 30 seconds, firing bets at the last 3 min of each 15-min window.
-# Set up via Windows Task Scheduler to launch on boot (see README or register_task.ps1).
+# V6 PAPER MODE: logs picks but does NOT execute real trades.
+# V6 CHANGES: trend-only (contrarian ban), 1m momentum fix, price cap 10-65c
+# Switch --paper to --execute --yes when model achieves >55% win rate over 20+ trades.
 
 $ProjectRoot = "C:\Users\Kevan\kalishi-edge"
 $Python      = "python"
 $Script      = "$ProjectRoot\scripts\run_intraday.py"
 $LogDir      = "$ProjectRoot\logs"
-$BankRoll    = 10       # ← update as your balance grows
-$Assets      = "BTC ETH SOL"
-$WaitMin     = 3        # fire bets only in last N minutes of each window
+$Assets      = "BTC ETH SOL DOGE XRP"
+$WaitMin     = 3.0      # fire bets in last 3 min — gives 6+ poll cycles to fire
 $PollSec     = 30       # seconds between scans
 
 # Kalshi is only open during certain hours (Mon–Fri, roughly 8am–11pm ET).
@@ -24,15 +24,13 @@ $run = 0
 while ($true) {
     $run++
     $ts  = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
-    $log = "$LogDir\intraday_$ts.log"
+    $log = "$LogDir\intraday_V6_paper_$ts.log"
 
-    Write-Host "$(Get-Date -Format 'HH:mm:ss')  [run #$run] Starting Kalshi intraday loop → $log"
+    Write-Host "$(Get-Date -Format 'HH:mm:ss')  [run #$run] Starting Kalshi V6 PAPER MODE → $log"
 
     $argList = @(
         "-u", $Script,
-        "--bankroll", $BankRoll,
-        "--execute",
-        "--yes",
+        "--paper",
         "--loop",
         "--loop-seconds", $PollSec,
         "--wait",

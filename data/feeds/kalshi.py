@@ -113,34 +113,51 @@ def _get_headers(method: str = "GET", url: str = "") -> dict:
 # ─── Market Fetching ──────────────────────────────────────────────────────────
 
 async def get_active_markets(
-    category: str = "sports",
+    category: str = "",
     status: str = "open",
     limit: int = 200,
+    max_pages: int = 10,
+    series_ticker: str = "",
 ) -> list[dict]:
     """
-    Fetch all active Kalshi markets matching category.
-    Returns list of market objects with yes_bid, yes_ask, no_bid, no_ask.
+    Fetch active Kalshi markets with cursor-based pagination.
+    Set category="" to fetch ALL market categories (sports, esports, crypto, etc.).
+    Use series_ticker to filter to a specific series (e.g. 'KXNBA', 'KXBTC').
+    Paginates up to max_pages * limit results.
     """
     if not KALSHI_API_KEY:
         return _mock_kalshi_markets()
 
-    params = {
-        "status": status,
-        "limit": limit,
-    }
-    if category:
-        params["category"] = category
+    all_markets = []
+    cursor = None
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(
-                f"{KALSHI_BASE_URL}/markets",
-                headers=_get_headers("GET", f"{KALSHI_BASE_URL}/markets"),
-                params=params,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            return data.get("markets", [])
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            for _ in range(max_pages):
+                params: dict = {"status": status, "limit": limit}
+                if category:
+                    params["category"] = category
+                if series_ticker:
+                    params["series_ticker"] = series_ticker
+                if cursor:
+                    params["cursor"] = cursor
+
+                url = f"{KALSHI_BASE_URL}/markets"
+                resp = await client.get(
+                    url,
+                    headers=_get_headers("GET", url),
+                    params=params,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                page = data.get("markets", [])
+                all_markets.extend(page)
+
+                cursor = data.get("cursor")
+                if not cursor or len(page) < limit:
+                    break  # last page
+
+        return all_markets
     except Exception as e:
         print(f"[Kalshi] Error fetching markets: {e}")
         return _mock_kalshi_markets()
@@ -459,15 +476,43 @@ def find_kalshi_arb(
 
 def normalize_kalshi_market(market: dict) -> dict:
     """
-    Convert raw Kalshi API response into standardized format
-    consistent with the rest of the feeds.
+    Convert raw Kalshi API v2 response into standardized format.
+    Handles both old (yes_ask in cents) and new (yes_ask_dollars in USD) field names.
     """
-    yes_ask = market.get("yes_ask", 0)
-    no_ask = market.get("no_ask", 0)
-    yes_bid = market.get("yes_bid", 0)
+    def _to_cents(old_key: str, new_dollars_key: str) -> int:
+        """Read old int-cents field or new dollars string, return int cents."""
+        v = market.get(old_key)
+        if v is not None and v != 0:
+            return int(v)
+        d = market.get(new_dollars_key)
+        if d is not None:
+            try:
+                return round(float(d) * 100)
+            except (ValueError, TypeError):
+                pass
+        return 0
+
+    def _to_float(old_key: str, new_fp_key: str) -> float:
+        v = market.get(old_key)
+        if v is not None and v != 0:
+            try:
+                return float(v)
+            except (ValueError, TypeError):
+                pass
+        fp = market.get(new_fp_key)
+        if fp is not None:
+            try:
+                return float(fp)
+            except (ValueError, TypeError):
+                pass
+        return 0.0
+
+    yes_ask = _to_cents("yes_ask", "yes_ask_dollars")
+    yes_bid = _to_cents("yes_bid", "yes_bid_dollars")
+    no_ask  = _to_cents("no_ask",  "no_ask_dollars")
 
     yes_prob = yes_ask / 100.0 if yes_ask else 0.0
-    no_prob = no_ask / 100.0 if no_ask else 0.0
+    no_prob  = no_ask  / 100.0 if no_ask  else 0.0
 
     # Mid price
     yes_mid = (yes_bid + yes_ask) / 2 / 100.0 if (yes_bid and yes_ask) else yes_prob
@@ -484,9 +529,9 @@ def normalize_kalshi_market(market: dict) -> dict:
         "yes_american_odds": _kalshi_to_american_odds(yes_ask),
         "no_american_odds": _kalshi_to_american_odds(no_ask),
         "close_time": market.get("close_time"),
-        "volume": market.get("volume", 0),
-        "open_interest": market.get("open_interest", 0),
-        "liquidity": market.get("liquidity", 0),
+        "volume": _to_float("volume", "volume_fp"),
+        "open_interest": _to_float("open_interest", "open_interest_fp"),
+        "liquidity": _to_float("liquidity", "liquidity_dollars"),
     }
 
 
@@ -494,25 +539,23 @@ def normalize_kalshi_market(market: dict) -> dict:
 
 async def get_sports_markets_today() -> list[dict]:
     """
-    Fetch all open sports markets on Kalshi, normalized.
-    Filters to games closing today (intraday markets).
+    Fetch ALL open Kalshi markets (sports, esports, crypto, tennis, economics, etc.),
+    normalized and filtered to those with a future close_time.
     """
-    markets = await get_active_markets(category="sports")
+    markets = await get_active_markets(category="")  # empty = all categories
     normalized = [normalize_kalshi_market(m) for m in markets]
 
-    today = datetime.utcnow().date()
+    now = datetime.utcnow()
     filtered = []
     for m in normalized:
-        if m.get("status") != "open":
-            continue
         close_time = m.get("close_time")
         if close_time:
             try:
-                close_date = datetime.fromisoformat(close_time.replace("Z", "+00:00")).date()
-                if close_date == today:
+                close_dt = datetime.fromisoformat(close_time.replace("Z", "+00:00")).replace(tzinfo=None)
+                if close_dt > now:
                     filtered.append(m)
             except Exception:
-                filtered.append(m)  # include if can't parse
+                filtered.append(m)  # include if can't parse close_time
         else:
             filtered.append(m)
 

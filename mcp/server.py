@@ -1519,10 +1519,35 @@ async def kalshi_balance():
 
 
 @app.get("/kalshi/markets")
-async def kalshi_markets_today():
-    """Today's open Kalshi sports markets with yes/no prices."""
-    from data.feeds.kalshi import get_sports_markets_today
-    markets = await get_sports_markets_today()
+async def kalshi_markets_today(category: str = "", sport: str = ""):
+    """
+    All open Kalshi markets with yes/no prices.
+    Optional ?category=sports|esports|crypto|economics|elections
+    Optional ?sport=NBA|MLB|Tennis|Soccer etc. (filters by title keyword)
+    """
+    from data.feeds.kalshi import get_sports_markets_today, get_active_markets, normalize_kalshi_market
+    if category:
+        raw = await get_active_markets(category=category)
+        from datetime import datetime as _dt
+        now = _dt.utcnow()
+        markets = []
+        for m in [normalize_kalshi_market(r) for r in raw]:
+            ct = m.get("close_time")
+            if ct:
+                try:
+                    if _dt.fromisoformat(ct.replace("Z", "+00:00")).replace(tzinfo=None) > now:
+                        markets.append(m)
+                except Exception:
+                    markets.append(m)
+            else:
+                markets.append(m)
+    else:
+        markets = await get_sports_markets_today()
+
+    if sport:
+        kw = sport.upper()
+        markets = [m for m in markets if kw in (m.get("title") or "").upper() or kw in (m.get("ticker") or "").upper()]
+
     return {
         "generated_at": datetime.now().isoformat(),
         "open_markets":  len(markets),

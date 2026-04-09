@@ -1,0 +1,21 @@
+{
+  "timestamp": "2026-04-06T16:51:26.786514+00:00",
+  "opportunities_found": 0,
+  "opportunities_filtered": 0,
+  "executed": 0,
+  "dry_run": false,
+  "newly_settled_bets": 0,
+  "top_opportunities": [],
+  "executed_bets": [],
+  "performance": {
+    "total_bets": 0,
+    "win_rate": 0.0,
+    "roi_pct": 0.0,
+    "gross_pnl": 0,
+    "open_exposure": 0
+  },
+  "best_strategies": [],
+  "top_signal_correlations": [],
+  "daily_pnl": [],
+  "daily_spend_tracker": {}
+}

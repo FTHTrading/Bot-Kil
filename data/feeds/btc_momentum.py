@@ -78,6 +78,23 @@ async def _binance_candles(
     return None
 
 
+async def _binance_candles_1m(
+    client: httpx.AsyncClient, symbol: str, limit: int = 10
+) -> Optional[list]:
+    """Return list of 1-min candles for very-short-term momentum (last 10 minutes)."""
+    try:
+        r = await client.get(
+            _BINANCE_CANDLES,
+            params={"symbol": symbol, "interval": "1m", "limit": limit},
+            timeout=8,
+        )
+        if r.status_code == 200:
+            return r.json()
+    except Exception:
+        pass
+    return None
+
+
 async def _binance_spot_price(
     client: httpx.AsyncClient, symbol: str
 ) -> Optional[float]:
@@ -127,6 +144,24 @@ async def _coinbase_candles(
             data = r.json()
             # Coinbase returns newest first; reverse to chronological order
             return list(reversed(data))
+    except Exception:
+        pass
+    return None
+
+
+async def _coinbase_candles_1m(
+    client: httpx.AsyncClient, pair: str, limit: int = 10
+) -> Optional[list]:
+    """Return Coinbase 1-min candles for short-term momentum (fallback when Binance 451s)."""
+    try:
+        r = await client.get(
+            _COINBASE_CANDLES.format(pair=pair),
+            params={"granularity": 60},  # 60 sec = 1 min
+            timeout=8,
+        )
+        if r.status_code == 200:
+            data = r.json()
+            return list(reversed(data[-limit:]))  # chronological, trim to limit
     except Exception:
         pass
     return None
@@ -191,17 +226,27 @@ async def _fetch_asset(
     symbol     = _SYMBOLS.get(asset)
     cb_pair    = _COINBASE_PAIRS.get(asset)
 
-    # Fetch candles and real-time spot prices in parallel (Binance + Coinbase)
+    # Fetch 5-min candles, 1-min candles, and real-time spot prices in parallel
+    # Note: Binance returns 451 (geo-blocked) in US — Coinbase fallbacks below
     tasks = [
         _binance_candles(client, symbol) if symbol else asyncio.sleep(0, None),
         _binance_spot_price(client, symbol) if symbol else asyncio.sleep(0, None),
         _coinbase_spot_price(client, cb_pair) if cb_pair else asyncio.sleep(0, None),
+        _binance_candles_1m(client, symbol) if symbol else asyncio.sleep(0, None),
     ]
-    candles, binance_spot, coinbase_spot = await asyncio.gather(*tasks, return_exceptions=False)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    candles      = results[0] if not isinstance(results[0], Exception) else None
+    binance_spot = results[1] if not isinstance(results[1], Exception) else None
+    coinbase_spot = results[2] if not isinstance(results[2], Exception) else None
+    candles_1m   = results[3] if not isinstance(results[3], Exception) else None
 
     # Coinbase fallback for candles
     if not candles and cb_pair:
         candles = await _coinbase_candles(client, cb_pair)
+
+    # Coinbase fallback for 1-min candles (Binance returns 451 in US)
+    if not candles_1m and cb_pair:
+        candles_1m = await _coinbase_candles_1m(client, cb_pair)
 
     if not candles:
         return asset, {}
@@ -216,9 +261,48 @@ async def _fetch_asset(
         signals["current"]    = live_price
         signals["spot_live"]  = True
         signals["spot_source"] = "binance" if binance_spot else "coinbase"
+
+        # LIVE-ANCHOR FIX: Re-compute mom_5m, mom_15m, and trend using the live
+        # spot price as the latest anchor instead of the stale last-closed candle.
+        # A 5-min candle can be up to 4+ min stale mid-period, causing the model
+        # to see the OLD trend direction while price has already reversed.
+        saved_closes = signals.get("closes", [])
+        if len(saved_closes) >= 2:
+            # Replace the last (stale) close with live_price for momentum purposes
+            anchored = list(saved_closes[:-1]) + [live_price]
+            price_5m_ago  = anchored[-2]                                   # ~5 min ago
+            price_15m_ago = anchored[-4] if len(anchored) >= 4 else anchored[0]
+            signals["mom_5m"]  = (live_price - price_5m_ago)  / price_5m_ago  if price_5m_ago  else 0.0
+            signals["mom_15m"] = (live_price - price_15m_ago) / price_15m_ago if price_15m_ago else signals.get("mom_15m", 0.0)
+            # Recompute trend from live-anchored last 3 moves
+            last4  = anchored[-4:]
+            ups    = sum(1 for i in range(1, len(last4)) if last4[i] > last4[i - 1])
+            downs  = sum(1 for i in range(1, len(last4)) if last4[i] < last4[i - 1])
+            if ups >= 2 and signals["mom_5m"] > 0:
+                signals["trend"] = "up"
+            elif downs >= 2 and signals["mom_5m"] < 0:
+                signals["trend"] = "down"
+            else:
+                signals["trend"] = "flat"
+            signals["closes"] = anchored[-6:]
     else:
         signals["spot_live"]  = False
         signals["spot_source"] = "stale_candle"
+
+    # 1-min momentum: compute very-short-term signal from 1-min candles
+    # Coinbase format: [time, low, high, open, close, vol] (index 4 = close)
+    # Binance format:  [open_ms, open, high, low, close, vol, ...] (index 4 = close)
+    # Both use index 4 for close price
+    if candles_1m and len(candles_1m) >= 3:
+        closes_1m = [float(c[4]) for c in candles_1m]
+        c_now = closes_1m[-1]
+        c_1m  = closes_1m[-2]
+        c_3m  = closes_1m[-4] if len(closes_1m) >= 4 else closes_1m[0]
+        signals["mom_1m"] = (c_now - c_1m) / c_1m if c_1m else 0.0
+        signals["mom_3m"] = (c_now - c_3m) / c_3m if c_3m else 0.0
+    else:
+        signals["mom_1m"] = 0.0
+        signals["mom_3m"] = 0.0
 
     return asset, signals
 

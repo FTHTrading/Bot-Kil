@@ -61,7 +61,18 @@ models/*.joblib
 models/*.h5
 models/*.pt
 models/*.bin
+# ── Runtime logs & state (never push live trade data) ────────────────────────────────────────
+logs/
+server_err.txt
+server_out.txt
+*.jsonl
 
+# ── ChromaDB vectorstore (large binaries) ────────────────────────────────────────────────────
+db/vectorstore/
+
+# ── Training data ─────────────────────────────────────────────────────────────────────────────
+data/training_data.jsonl
+data/cache/
 # ── Misc ─────────────────────────────────────────────────
 *.bak
 *.swp

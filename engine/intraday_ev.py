@@ -53,16 +53,35 @@ _DAILY_VOL: dict[str, float] = {
 # Kelly fraction — smaller than daily picks (more noise, less model edge)
 _KELLY_FRACTION = 0.10
 
-# Minimum edge to surface a pick (3% = lower than daily 5% because
-# intraday markets reset every 15 min — frequency compensates)
-_MIN_EDGE = 0.04
+# Minimum edge to surface a pick — net of fees.  V5 restores 8% after post-mortem
+# showed 5% allowed too many marginal bets (4/22 win rate).  Combined with 2% fee
+# this means 10% gross edge minimum.
+_MIN_EDGE = 0.08
+
+# Minimum bet price — floor at 10¢.  Post-mortem: cheap contracts (4-9¢) look like
+# huge edges but are lottery tickets the model can't reliably predict.
+_MIN_BET_PRICE = 0.10
+
+# Maximum bet price — cap at 65¢.  V6: expensive contracts (>65¢) have thin margins
+# and need very high accuracy.  Two trend losses at 82¢ and 47¢ showed that even
+# correct direction calls can lose when buying at high implied probability.
+_MAX_BET_PRICE = 0.65
+
+# Minimum |gap| (current vs floor_strike) to place a bet.
+# Scales with time remaining — tighter filter early (noise), looser late (signal).
+_MIN_GAP_PCT_EARLY = 0.08   # >5 min remaining: need 0.08% gap (stricter)
+_MIN_GAP_PCT_LATE  = 0.02   # ≤2 min remaining: 0.02% is enough
+
+# Kalshi fee rate — contracts are fee'd roughly 1-3¢ per contract on settlement.
+# We estimate ~2% of contract value as average round-trip fee.
+_FEE_RATE = 0.02
 
 # Momentum persistence factor αk:
-# If BTC moved +1% in the last 5 min, our model says P(up) = 50 + α*100*mom_5m
-# Empirical for crypto 15-min windows: ~55-60% of short momentum persists.
-# α controls how strongly we shade probability from a momentum reading.
-# Calibrated conservatively; raise if backtesting shows stronger persistence.
-_MOMENTUM_K = 0.15    # 1% momentum move → +1.5% probability shift
+# Post-mortem V4: 0.15 was far too conservative — momentum barely registered,
+# letting the position signal dominate with inflated vol.  In 15-min crypto
+# windows, short momentum is the dominant signal.  0.50 means a 0.1% move
+# shifts probability by 5 percentage points.
+_MOMENTUM_K = 0.50    # 1% momentum move → +5% probability shift
 
 # Maximum probability we'll predict (avoid over-confidence)
 _PROB_CAP = 0.82
@@ -140,10 +159,15 @@ def _momentum_prob(
     elif trend == "down":
         prob -= trend_bonus
 
-    # Momentum decays with time remaining (less predictive once 10+ min have passed)
-    # At 15 min remaining: full signal. At 3 min remaining: half signal (already moved).
-    decay = min(minutes_remaining, 15) / 15.0
-    prob = 0.50 + (prob - 0.50) * decay
+    # V5 POST-MORTEM FIX: Momentum should STRENGTHEN near expiry, not decay.
+    # With 3 min left, the direction is established — momentum is the strongest
+    # signal.  With 15 min left, anything can happen — momentum is weaker.
+    # Old: decay = t_min/15 (killed 80% of signal at 3 min — catastrophic)
+    # New: inv_decay = 1 - t_min/15 (momentum at full strength near close)
+    inv_decay = 1.0 - min(minutes_remaining, 15) / 15.0  # 0 min = 1.0, 15 min = 0.0
+    # Clamp to [0.30, 1.0] so momentum always has at least 30% strength
+    inv_decay = max(0.30, inv_decay)
+    prob = 0.50 + (prob - 0.50) * inv_decay
 
     return max(_PROB_FLOOR, min(_PROB_CAP, prob))
 
@@ -156,13 +180,19 @@ def _blend_prob(
     """
     Blend position and momentum signals weighted by time remaining.
 
-    Early in the window: momentum drives prediction (price hasn't moved yet).
-    Late in the window: position dominates (current vs floor_strike is the answer).
+    V5 POST-MORTEM FIX: Reversed the weighting scheme.
+    - Early: position is accurate (price ≈ open, gap is noise)
+    - Late:  momentum dominates (direction is established, position unreliable
+             because vol floor inflates recovery chances)
+
+    At 3 min left:  momentum 75%, position 25%
+    At 15 min left: momentum 25%, position 75%
     """
     t_frac = min(minutes_remaining, 15) / 15.0   # 1=just opened, 0=expiring
 
-    # Momentum weight peaks at 65% when market is freshly opened
-    w_momentum = t_frac * 0.65
+    # Momentum weight: HIGH near expiry (when direction is established)
+    # LOW early (when price hasn't moved yet)
+    w_momentum = 0.25 + (1.0 - t_frac) * 0.50   # range: 0.25 (early) to 0.75 (late)
     w_position = 1.0 - w_momentum
 
     return w_momentum * prob_momentum + w_position * prob_position
@@ -221,29 +251,60 @@ def intraday_edge_picks(
             continue
 
         # ── Signal 1: Position (where is price now vs opening price?) ──
-        # Use realized vol from momentum feed when available (more accurate than
-        # the fixed daily vol assumption, which is typically 2-4x too high intraday).
-        # realized_vol is per-5-min period; convert to equivalent daily vol for _position_prob.
+        # V5 POST-MORTEM FIX: The 50% vol floor was 2-3x above reality, making the
+        # position signal think recovery was likely when it wasn't.  Now we trust
+        # realized vol much more aggressively — floor at only 15% of default.
+        # If realized vol is very low, the model correctly says "gap is permanent"
+        # and avoids phantom recovery edges.
+        default_vol = _DAILY_VOL.get(asset, 0.05)
+        vol_floor   = default_vol * 0.15          # minimal floor — trust realized vol
         realized_vol_5m = sig.get("realized_vol", 0.0)
         if realized_vol_5m and realized_vol_5m > 0.00005:
-            # 288 five-minute periods in a day → daily_vol = vol_5m * sqrt(288)
-            daily_vol = realized_vol_5m * (288 ** 0.5)
+            daily_vol = max(realized_vol_5m * (288 ** 0.5), vol_floor)
         else:
-            daily_vol = _DAILY_VOL.get(asset, 0.05)
+            daily_vol = default_vol
         p_pos = _position_prob(current, floor, t_min, daily_vol)
 
         # ── Signal 2: Momentum (recent price direction) ──
         mom_5m  = sig.get("mom_5m", 0.0)
         mom_15m = sig.get("mom_15m", 0.0)
+        mom_1m  = sig.get("mom_1m", 0.0)
+        mom_3m  = sig.get("mom_3m", 0.0)
         trend   = sig.get("trend", "flat")
-        p_mom = _momentum_prob(mom_5m, mom_15m, trend, t_min)
+
+        # Late-window boost: use 1-min candle data when ≤3 min remain
+        # This gives much more responsive direction signal near expiry.
+        if t_min <= 3.0 and (mom_1m != 0.0 or mom_3m != 0.0):
+            # Blend: 50% 1-min, 30% 3-min, 20% 5-min (recency wins late)
+            effective_mom_5m = 0.50 * mom_1m + 0.30 * mom_3m + 0.20 * mom_5m
+            effective_mom_15m = mom_5m  # use 5m as the "longer" signal
+        else:
+            effective_mom_5m = mom_5m
+            effective_mom_15m = mom_15m
+
+        p_mom = _momentum_prob(effective_mom_5m, effective_mom_15m, trend, t_min)
+
+        # ── Gap gate: time-adaptive — strict early, loose late ──
+        gap_pct = (current - floor) / floor * 100 if floor > 0 else 0.0
+        # Linearly interpolate gap threshold: strict at 15 min, loose at ≤2 min
+        if t_min <= 2.0:
+            gap_thresh = _MIN_GAP_PCT_LATE
+        elif t_min >= 5.0:
+            gap_thresh = _MIN_GAP_PCT_EARLY
+        else:
+            # Linear blend between 5 min and 2 min
+            frac = (t_min - 2.0) / 3.0
+            gap_thresh = _MIN_GAP_PCT_LATE + frac * (_MIN_GAP_PCT_EARLY - _MIN_GAP_PCT_LATE)
+        if abs(gap_pct) < gap_thresh:
+            continue
 
         # ── Blend ──
         model_prob = _blend_prob(p_pos, p_mom, t_min)
 
-        # ── Edge calculation ──
-        edge_yes = model_prob - yes_ask
-        edge_no  = (1.0 - model_prob) - no_ask
+        # ── Edge calculation (fee-adjusted) ──
+        # Subtract estimated fee from raw edge so we only bet when net-of-fee edge > threshold
+        edge_yes = model_prob - yes_ask - _FEE_RATE
+        edge_no  = (1.0 - model_prob) - no_ask - _FEE_RATE
 
         if edge_yes >= edge_no and edge_yes >= min_edge:
             side       = "YES"
@@ -258,6 +319,32 @@ def intraday_edge_picks(
         else:
             continue
 
+        # Gate: skip lottery-ticket prices (< 10¢) — model unreliable at extremes
+        if bet_price < _MIN_BET_PRICE:
+            continue
+
+        # Gate: skip expensive contracts (> 65¢) — thin margins, need extreme accuracy
+        if bet_price > _MAX_BET_PRICE:
+            continue
+
+        # Gate: signal agreement — TREND-ONLY strategy.
+        # V6 POST-MORTEM: Contrarian plays went 1W/15L (6% win rate) = -$12.03 net.
+        # Trend plays went 3W/2L (60% win rate) = +$3.22 net.  Contrarian is a losing
+        # strategy in 15-min crypto windows.  The market prices cheap contracts cheaply
+        # for a reason — the position signal's "recovery edge" is an illusion from
+        # inflated vol.  BAN ALL CONTRARIAN PLAYS.  No exceptions.
+        if trend == "up" and side == "NO":
+            continue
+        if trend == "down" and side == "YES":
+            continue
+        # If trend is flat, only allow if momentum agrees with chosen side
+        if trend == "flat":
+            combined_mom_check = 0.70 * effective_mom_5m + 0.30 * effective_mom_15m
+            if side == "YES" and combined_mom_check < 0:
+                continue
+            if side == "NO" and combined_mom_check > 0:
+                continue
+
         # EV per dollar
         ev_pct = (our_prob * (1.0 / bet_price - 1.0) - (1.0 - our_prob)) * 100
 
@@ -267,8 +354,20 @@ def intraday_edge_picks(
         if stake <= 0:
             continue
 
+        # ── Confidence score (0-100): composite of gap strength, momentum, trend, time ──
+        # Higher = more reliable signal. Scale each factor 0-1 then combine.
+        combined_mom = 0.70 * effective_mom_5m + 0.30 * effective_mom_15m
+        _gap_score = min(abs(gap_pct) / 0.20, 1.0)              # |gap| of 0.20% = max score
+        _mom_score = min(abs(combined_mom) * 100 / 0.10, 1.0)   # 0.10% combined momentum = max
+        _trend_score = 1.0 if trend in ("up", "down") else 0.3  # consistent trend = full marks
+        # Time bonus: late-window positions are more certain
+        _time_score = 1.0 - min(t_min, 10) / 10.0               # 0 min = 1.0, 10 min = 0.0
+        confidence = round(
+            (_gap_score * 0.35 + _mom_score * 0.25 + _trend_score * 0.20 + _time_score * 0.20) * 100
+        )
+
         # Verdict
-        if edge >= 0.10:
+        if edge >= 0.10 and confidence >= 60:
             verdict = "STRONG VALUE"
         elif edge >= 0.06:
             verdict = "VALUE"
@@ -279,7 +378,7 @@ def intraday_edge_picks(
         gap_pct = (current - floor) / floor * 100
         signal_str = (
             f"pos={p_pos:.2f}  mom={p_mom:.2f}  "
-            f"gap={gap_pct:+.3f}%  5m={mom_5m*100:+.3f}%  trend={trend}"
+            f"gap={gap_pct:+.3f}%  5m={mom_5m*100:+.3f}%  trend={trend}  conf={confidence}"
         )
 
         picks.append({
@@ -310,6 +409,7 @@ def intraday_edge_picks(
                 "mom_5m_pct":    round(mom_5m * 100, 4),
                 "mom_15m_pct":   round(mom_15m * 100, 4),
                 "trend":          trend,
+                "confidence":     confidence,
                 "signal_str":     signal_str,
             },
         })

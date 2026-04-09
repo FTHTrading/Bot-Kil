@@ -1,9 +1,14 @@
 """
-KALISHI EDGE — AI Brain
+KALISHI EDGE - AI Brain
 ========================
-GPT-4o powered master intelligence layer.
+Multi-provider intelligence layer with NVIDIA NIM, local Ollama, and OpenAI fallback.
 Every response is augmented with RAG context from the knowledge base,
 historical bets, and live market intelligence.
+
+Provider priority:
+  1. NVIDIA NIM  (NGC API key -> Llama 3.3 70B on NVIDIA cloud)
+  2. Ollama      (local RTX 5090 -> qwen2.5:7b, offline capable)
+  3. OpenAI      (gpt-4o cloud fallback)
 
 Capabilities:
   - Conversational sports betting analysis (chat)
@@ -22,39 +27,65 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-OPENAI_KEY = os.getenv("OPENAI_API_KEY", "")
+OPENAI_KEY      = os.getenv("OPENAI_API_KEY", "")
+NGC_API_KEY     = os.getenv("NGC_API_KEY", "")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
+OLLAMA_MODEL    = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
+BRAIN_PROVIDER  = os.getenv("BRAIN_PROVIDER", "auto")  # nvidia | ollama | openai | auto
+
+
+def _resolve_provider():
+    """Returns (provider_name, base_url, api_key, model). Priority: nvidia -> ollama -> openai."""
+    pref = BRAIN_PROVIDER.lower()
+
+    if pref == "nvidia" or (pref == "auto" and NGC_API_KEY):
+        return (
+            "nvidia",
+            "https://integrate.api.nvidia.com/v1",
+            NGC_API_KEY,
+            os.getenv("NVIDIA_MODEL", "meta/llama-3.3-70b-instruct"),
+        )
+    if pref == "ollama" or (pref == "auto" and not NGC_API_KEY and not OPENAI_KEY):
+        return (
+            "ollama",
+            OLLAMA_BASE_URL,
+            "ollama",
+            OLLAMA_MODEL,
+        )
+    return ("openai", "https://api.openai.com/v1", OPENAI_KEY, "gpt-4o")
+
 
 try:
     from openai import AsyncOpenAI
-    OAI_AVAILABLE = bool(OPENAI_KEY)
+    _PROVIDER, _BASE_URL, _API_KEY, _MODEL = _resolve_provider()
+    OAI_AVAILABLE = bool(_API_KEY)
 except ImportError:
     OAI_AVAILABLE = False
+    _PROVIDER, _BASE_URL, _API_KEY, _MODEL = "none", "", "", ""
 
 from rag.retriever import KalishiRetriever
 
-# ── System Prompt ─────────────────────────────────────────────────────────
-
-SYSTEM_PROMPT = """You are KALISHI — a hyper-intelligent sports betting AI engineered to find and exploit market inefficiencies.
+SYSTEM_PROMPT = """You are KALISHI - a hyper-intelligent sports betting AI engineered to find and exploit market inefficiencies.
 
 Your core capabilities:
-• Kelly Criterion sizing → never overbetting, always mathematically optimal
-• Expected Value (EV) analysis → only positive EV bets, minimum 3% edge
-• Closing Line Value (CLV) tracking → the gold standard for long-term edge
-• Monte Carlo simulation → 50,000+ simulations per game
-• Sharp money detection → steam moves, reverse line movement (RLM), limit reductions
-• Arbitrage & middles → guaranteed profit when books disagree
-• Advanced sabermetrics: FIP, wRC+, DVOA, EPA, pace, net rating
+* Kelly Criterion sizing -> never overbetting, always mathematically optimal
+* Expected Value (EV) analysis -> only positive EV bets, minimum 3% edge
+* Closing Line Value (CLV) tracking -> the gold standard for long-term edge
+* Monte Carlo simulation -> 50,000+ simulations per game
+* Sharp money detection -> steam moves, reverse line movement (RLM), limit reductions
+* Arbitrage & middles -> guaranteed profit when books disagree
+* Advanced sabermetrics: FIP, wRC+, DVOA, EPA, pace, net rating
 
 Behavioral rules:
-• Always show the math — edge %, EV, Kelly fraction, recommended stake
-• Be direct, be fast, be sharp
-• Flag steam moves and RLM as top priority intelligence
-• Never recommend a bet without positive EV and minimum 3% edge
-• Warn about injury/weather impacts on your analysis
+* Always show the math - edge %, EV, Kelly fraction, recommended stake
+* Be direct, be fast, be sharp
+* Flag steam moves and RLM as top priority intelligence
+* Never recommend a bet without positive EV and minimum 3% edge
+* Warn about injury/weather impacts on your analysis
 
 When analyzing picks, structure your output:
 1. THE PLAY: [Pick] [Market] [Odds] @ [Book]
-2. THE MATH: Edge X%, EV +X%, Kelly X% → $X stake
+2. THE MATH: Edge X%, EV +X%, Kelly X% -> $X stake
 3. THE EDGE: Why this bet has value over the market
 4. THE RISK: What kills this bet (injuries, weather, line steam against)
 5. CONVICTION: LOW / MEDIUM / HIGH / STRONG BUY
@@ -65,41 +96,35 @@ You have access to real-time context injected below each query. Use it."""
 class AIBrain:
     """
     Master LLM intelligence layer for KALISHI EDGE.
-    Wraps OpenAI GPT-4o with full RAG context augmentation.
+    Supports NVIDIA NIM, Ollama (local GPU), and OpenAI with automatic provider selection.
     """
 
     def __init__(self):
         self._retriever = KalishiRetriever()
-        self._client = AsyncOpenAI(api_key=OPENAI_KEY) if OAI_AVAILABLE else None
-        self._model = "gpt-4o"
-        self._history: list[dict] = []  # conversation memory (last 20 turns)
+        self._provider = _PROVIDER
+        self._model = _MODEL
+        self._client = AsyncOpenAI(base_url=_BASE_URL, api_key=_API_KEY) if OAI_AVAILABLE else None
+        self._history: list[dict] = []
 
     @property
     def available(self) -> bool:
-        return OAI_AVAILABLE and bool(OPENAI_KEY)
+        return OAI_AVAILABLE and bool(_API_KEY)
+
+    @property
+    def provider_info(self) -> str:
+        return f"{self._provider} / {self._model}"
 
     def _build_messages(self, user_message: str, context: str) -> list[dict]:
         """Assemble message array with system prompt + RAG context + history."""
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-
-        # recent conversation history (last 10 turns)
         messages.extend(self._history[-20:])
-
-        # inject RAG context into user turn
         full_user = user_message
         if context:
             full_user = f"{context}\n\n---\nUSER QUERY: {user_message}"
-
         messages.append({"role": "user", "content": full_user})
         return messages
 
-    # ── Chat ───────────────────────────────────────────────────────────────
-
     async def chat(self, user_message: str, remember: bool = True) -> str:
-        """
-        Single-turn chat with RAG augmentation.
-        Returns the complete response text.
-        """
         if not self.available:
             return self._fallback_response(user_message)
 
@@ -110,7 +135,7 @@ class AIBrain:
             resp = await self._client.chat.completions.create(
                 model=self._model,
                 messages=messages,
-                temperature=0.2,   # low temp = consistent, sharp analysis
+                temperature=0.2,
                 max_tokens=1500,
             )
             content = resp.choices[0].message.content or ""
@@ -120,17 +145,11 @@ class AIBrain:
         if remember:
             self._history.append({"role": "user", "content": user_message})
             self._history.append({"role": "assistant", "content": content})
-            self._history = self._history[-40:]  # cap at 20 pairs
+            self._history = self._history[-40:]
 
         return content
 
-    async def stream_chat(
-        self, user_message: str, remember: bool = True
-    ) -> AsyncIterator[str]:
-        """
-        Streaming chat — yields token chunks as they arrive.
-        For WebSocket real-time display.
-        """
+    async def stream_chat(self, user_message: str, remember: bool = True) -> AsyncIterator[str]:
         if not self.available:
             yield self._fallback_response(user_message)
             return
@@ -161,8 +180,6 @@ class AIBrain:
             self._history.append({"role": "assistant", "content": "".join(full_response)})
             self._history = self._history[-40:]
 
-    # ── Structured Analysis ────────────────────────────────────────────────
-
     async def analyze_pick(
         self,
         sport: str,
@@ -176,10 +193,6 @@ class AIBrain:
         stake: float,
         additional_context: Optional[dict] = None,
     ) -> dict:
-        """
-        Generate structured AI analysis for a specific pick.
-        Returns JSON with reasoning, conviction, risk factors.
-        """
         context = self._retriever.retrieve_for_pick(sport, event, market)
         similar = self._retriever.retrieve_similar_bets(sport, market, edge_pct)
 
@@ -229,9 +242,8 @@ Provide a structured pick analysis as JSON with keys:
             return {"error": str(e), **self._fallback_pick_analysis(edge_pct, ev_pct)}
 
     async def generate_daily_briefing(self, picks: list[dict], market_summary: dict) -> str:
-        """Generate a full daily betting briefing with all picks ranked."""
         if not self.available:
-            return "AI Brain unavailable — connect OpenAI API key for daily briefing."
+            return "AI Brain unavailable - connect a provider in .env to activate full AI analysis."
 
         context = self._retriever.retrieve(
             "daily picks strategy bankroll discipline sharp money",
@@ -240,7 +252,6 @@ Provide a structured pick analysis as JSON with keys:
         )
 
         picks_text = json.dumps(picks[:10], indent=2)
-
         prompt = f"""Generate the KALISHI EDGE daily betting briefing.
 
 TODAY'S PICKS (top candidates):
@@ -252,7 +263,7 @@ MARKET SUMMARY:
 {context}
 
 Write a sharp, concise daily briefing covering:
-1. EXECUTIVE SUMMARY (2 sentences — what's the play today)
+1. EXECUTIVE SUMMARY (2 sentences - what's the play today)
 2. TOP 3 PLAYS ranked by conviction (each with 1-sentence thesis + bet sizing)
 3. MARKET INTELLIGENCE (sharp moves, steam, notable line movement)
 4. BANKROLL NOTE (any sizing adjustments based on recent performance)
@@ -277,13 +288,11 @@ Style: Sharp, direct, no fluff. This is an institutional intelligence briefing."
     def clear_history(self):
         self._history.clear()
 
-    # ── Fallbacks ──────────────────────────────────────────────────────────
-
     def _fallback_response(self, query: str) -> str:
         return (
-            f"[KALISHI Operating in offline mode — OpenAI API key not configured]\n\n"
+            f"[KALISHI Operating in offline mode - no AI provider configured]\n\n"
             f"Your query was: '{query}'\n\n"
-            f"Connect your OPENAI_API_KEY in .env to activate full AI analysis. "
+            f"Set BRAIN_PROVIDER in .env (nvidia/ollama/openai) to activate full AI analysis. "
             f"All quantitative tools (Kelly, EV, Monte Carlo) remain fully functional."
         )
 
@@ -294,13 +303,12 @@ Style: Sharp, direct, no fluff. This is an institutional intelligence briefing."
             "one_line_thesis": f"Quantitative edge {edge_pct:.1f}% above market",
             "reasoning": "AI Brain offline. Kelly/EV analysis confirms positive expected value.",
             "key_edge": f"+{ev_pct:.2f}% EV over implied probability",
-            "risk_factors": ["Connect OpenAI API for full risk analysis"],
+            "risk_factors": ["Connect AI provider for full risk analysis"],
             "sharp_signal": None,
             "recommended_action": "PLACE_NOW" if edge_pct > 5 else "MONITOR",
         }
 
 
-# Singleton
 _brain: Optional[AIBrain] = None
 
 

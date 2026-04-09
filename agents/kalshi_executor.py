@@ -29,10 +29,10 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 # ── Safety parameters ────────────────────────────────────────────────────────
-MIN_EDGE_TO_EXECUTE   = 0.04   # 4 % minimum edge
-MIN_PRICE_CENTS       = 5      # no highly-illiquid extreme 95%+ markets
-MAX_PRICE_CENTS       = 95
-MAX_CONTRACTS         = 500    # hard contract cap per order
+MIN_EDGE_TO_EXECUTE   = 0.06   # 6% minimum edge (V5: raised from 4%)
+MIN_PRICE_CENTS       = 10     # V5: raised from 4¢ — cheap contracts are losers (post-mortem)
+MAX_PRICE_CENTS       = 65     # V6: lowered from 96¢ — expensive contracts have thin margins
+MAX_CONTRACTS         = 5      # V5: hard cap 5 per order (was 500 — way too loose)
 MIN_SPEND_USD         = 1.0    # minimum $1 order value (supports small $10 accounts)
 MAX_SPEND_USD         = 500.0  # hard dollar cap per order
 MIN_LIQUIDITY_MULT    = 5.0    # market liquidity ≥ 5× our spend
@@ -191,7 +191,8 @@ async def _execute_crypto_pick(pick: dict, bankroll: float, dry_run: bool = True
         )
         return result
 
-    contracts    = min(contracts_for_spend(spend_usd, price_cents), MAX_CONTRACTS)
+    contracts    = min(contracts_for_spend(spend_usd, price_cents),
+                       pick.get("_max_contracts_override", MAX_CONTRACTS))
     actual_spend = round(contracts * (price_cents / 100.0), 2)
     profit_win   = potential_profit(contracts, yes_ask_cents, side)
 
